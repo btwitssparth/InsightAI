@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/layout/AppShell'
+import Dashboard from './pages/Dashboard'
 import './App.css'
 
 function Placeholder({ title }: { title: string }) {
@@ -25,7 +26,7 @@ function App() {
         <Route path="/signup" element={<Placeholder title="Create your account" />} />
 
         <Route element={<AppShell />}>
-          <Route path="/dashboard" element={<Placeholder title="Dashboard" />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/datasets" element={<Placeholder title="Datasets" />} />
           <Route
             path="/datasets/:datasetId"

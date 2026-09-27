@@ -14,25 +14,58 @@ from app.services.visualization import generate_visualization
 from database import SessionLocal
 
 logger = logging.getLogger("insightai.worker")
-POLL_INTERVAL_SECONDS = float(os.getenv("ANALYSIS_WORKER_POLL_INTERVAL", "2"))
-JOB_TIMEOUT_SECONDS = int(os.getenv("ANALYSIS_JOB_TIMEOUT_SECONDS", "900"))
+
+POLL_INTERVAL_SECONDS = max(0.5, float(os.getenv("ANALYSIS_WORKER_POLL_INTERVAL", "2")))
+JOB_TIMEOUT_SECONDS = max(60, int(os.getenv("ANALYSIS_JOB_TIMEOUT_SECONDS", "900")))
+MAX_JOB_ATTEMPTS = max(1, int(os.getenv("ANALYSIS_MAX_ATTEMPTS", "3")))
+
 
 def _utc_now():
     return datetime.now(timezone.utc)
 
+
 def _recover_stale_jobs():
     cutoff = _utc_now() - timedelta(seconds=JOB_TIMEOUT_SECONDS)
+
     with SessionLocal() as db:
-        jobs = db.query(Analysis).filter(
-            Analysis.status == "processing",
-            Analysis.updated_at < cutoff,
-        ).all()
+        jobs = (
+            db.query(Analysis)
+            .filter(
+                Analysis.status == "processing",
+                Analysis.updated_at < cutoff,
+            )
+            .all()
+        )
+
+        recovered = 0
+        failed = 0
+
         for analysis in jobs:
-            analysis.status = "pending"
-            analysis.error = "Previous worker stopped before completing this analysis."
+            if analysis.attempt_count >= MAX_JOB_ATTEMPTS:
+                analysis.status = "failed"
+                analysis.error = (
+                    "Analysis exceeded the maximum number of processing attempts."
+                )
+                failed += 1
+            else:
+                analysis.status = "pending"
+                analysis.error = (
+                    "Previous worker stopped before completing this analysis."
+                )
+                recovered += 1
+
             analysis.updated_at = _utc_now()
+
         if jobs:
             db.commit()
+
+        if recovered or failed:
+            logger.warning(
+                "Recovered %s stale jobs and permanently failed %s jobs",
+                recovered,
+                failed,
+            )
+
 
 def _claim_job():
     with SessionLocal() as db:
@@ -43,20 +76,59 @@ def _claim_job():
             .with_for_update(skip_locked=True)
             .first()
         )
+
         if analysis is None:
             db.rollback()
             return None
+
         analysis.status = "processing"
+        analysis.attempt_count += 1
         analysis.error = None
         analysis.updated_at = _utc_now()
+
         analysis_id = analysis.id
         db.commit()
+
+        logger.info(
+            "Claimed analysis %s (attempt %s/%s)",
+            analysis_id,
+            analysis.attempt_count,
+            MAX_JOB_ATTEMPTS,
+        )
+
         return analysis_id
+
+
+def _heartbeat(analysis_id: int):
+    with SessionLocal() as db:
+        analysis = db.query(Analysis).filter(
+            Analysis.id == analysis_id,
+            Analysis.status == "processing",
+        ).first()
+
+        if analysis is None:
+            return False
+
+        analysis.updated_at = _utc_now()
+        db.commit()
+        return True
+
 
 def _process_job(analysis_id):
     with SessionLocal() as db:
-        analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+        analysis = db.query(Analysis).filter(
+            Analysis.id == analysis_id
+        ).first()
+
         if analysis is None:
+            logger.warning("Analysis %s disappeared before processing", analysis_id)
+            return
+
+        if analysis.status != "processing":
+            logger.warning(
+                "Analysis %s is no longer processing; skipping",
+                analysis_id,
+            )
             return
 
         dataset = db.query(Dataset).filter(
@@ -72,19 +144,29 @@ def _process_job(analysis_id):
 
         try:
             dataframe = _load_dataframe(dataset)
+            _heartbeat(analysis_id)
+
             dataset_profile = profile_dataset(dataframe)
+            _heartbeat(analysis_id)
+
             plan = generate_analysis_plan(
                 question=analysis.question,
                 dataset_profile=dataset_profile,
             )
+            _heartbeat(analysis_id)
+
             result = execute_plan(
                 dataframe=dataframe,
                 plan=plan.model_dump(),
             )
+            _heartbeat(analysis_id)
+
             insight = generate_insight(
                 question=analysis.question,
                 result=result,
             )
+            _heartbeat(analysis_id)
+
             visualization = generate_visualization(result=result)
 
             analysis.status = "completed"
@@ -97,6 +179,7 @@ def _process_job(analysis_id):
             analysis.error = None
             analysis.updated_at = _utc_now()
             db.commit()
+
             logger.info("Analysis %s completed", analysis_id)
 
         except Exception:
@@ -104,17 +187,35 @@ def _process_job(analysis_id):
             logger.exception("Analysis %s failed", analysis_id)
 
             failed = db.query(Analysis).filter(
-                Analysis.id == analysis_id
+                Analysis.id == analysis_id,
+                Analysis.status == "processing",
             ).first()
 
             if failed is not None:
-                failed.status = "failed"
-                failed.error = "Analysis processing failed. Please try again."
+                if failed.attempt_count < MAX_JOB_ATTEMPTS:
+                    failed.status = "pending"
+                    failed.error = (
+                        "Analysis processing failed and will be retried."
+                    )
+                else:
+                    failed.status = "failed"
+                    failed.error = (
+                        "Analysis processing failed after multiple attempts. "
+                        "Please try again."
+                    )
+
                 failed.updated_at = _utc_now()
                 db.commit()
 
+
 def run_worker():
-    logger.info("InsightAI analysis worker started")
+    logger.info(
+        "InsightAI analysis worker started "
+        "(poll=%ss, timeout=%ss, max_attempts=%s)",
+        POLL_INTERVAL_SECONDS,
+        JOB_TIMEOUT_SECONDS,
+        MAX_JOB_ATTEMPTS,
+    )
 
     while True:
         try:
@@ -132,6 +233,7 @@ def run_worker():
         except Exception:
             logger.exception("Worker loop error")
             time.sleep(POLL_INTERVAL_SECONDS)
+
 
 if __name__ == "__main__":
     logging.basicConfig(

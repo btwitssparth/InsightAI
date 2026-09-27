@@ -250,6 +250,27 @@ def get_dataset(
     }
 
 
+@router.delete("/{dataset_id}", status_code=204)
+def delete_dataset(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    dataset = _get_owned_dataset(dataset_id, current_user["id"], db)
+
+    try:
+        supabase.storage.from_(BUCKET_NAME).remove([dataset.storage_path])
+        db.delete(dataset)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Could not delete dataset %s", dataset_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not delete dataset. Please try again.",
+        )
+
+
 @router.get("/{dataset_id}/preview")
 def preview_dataset(
     dataset_id: int,

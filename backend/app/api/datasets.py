@@ -13,6 +13,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.analysis import Analysis
 from app.models.dataset import Dataset
 from app.services.profiler import profile_dataset
+from app.services.resource_limits import validate_dataframe_resources
 from app.services.storage import download_dataset_file, upload_dataset_file
 from app.services.supabase import supabase
 
@@ -131,6 +132,8 @@ async def upload_dataset(
 
         if dataframe.shape[1] == 0:
             raise HTTPException(status_code=400, detail="Dataset has no columns")
+
+        validate_dataframe_resources(dataframe)
 
         dataset_uuid = str(uuid.uuid4())
         storage_path = (

@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Database,
   History,
-  PanelLeft,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -102,13 +101,9 @@ export function AppShell() {
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-20 flex h-16 items-center border-b border-[#e5e5e3] bg-white/95 px-5 backdrop-blur-sm md:px-8">
             <div className="flex items-center gap-3 md:hidden">
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#73736f] hover:bg-[#f0f0ed]"
-                aria-label="Open navigation"
-              >
-                <PanelLeft size={18} />
-              </button>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#171717] text-white">
+                <BarChart3 size={16} strokeWidth={2.2} />
+              </div>
               <span className="text-sm font-semibold">InsightAI</span>
             </div>
 

@@ -365,6 +365,7 @@ def get_dataset_analyses(
             "insight": analysis.insight,
             "visualization": analysis.visualization,
             "error": analysis.error,
+            "attempt_count": analysis.attempt_count,
             "created_at": analysis.created_at,
             "updated_at": analysis.updated_at,
         }

@@ -1,7 +1,11 @@
-from fastapi import APIRouter
+from typing import Any
 
-router = APIRouter(prefix='/auth', tags=['Auth'])
+from fastapi import APIRouter, Depends
 
-@router.get('/me')
-def get_me():
-    return {'status':'auth-foundation'}
+from app.dependencies import get_current_user
+
+router = APIRouter(prefix="/auth", tags=["Auth"])
+
+@router.get("/me")
+def get_me(current_user: dict[str, Any] = Depends(get_current_user)):
+    return current_user

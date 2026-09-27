@@ -32,7 +32,7 @@ def _validate_column(
     dataframe: pd.DataFrame,
     column: str | None,
     field_name: str,
-) -> None:
+):
     if not column:
         raise ValueError(
             f"'{field_name}' is required"
@@ -47,13 +47,17 @@ def _validate_column(
 def validate_plan(
     plan: dict,
     dataframe: pd.DataFrame,
-) -> None:
+):
     operation = plan.get("operation")
 
     if operation not in SUPPORTED_OPERATIONS:
         raise ValueError(
             f"Unsupported operation: {operation}"
         )
+
+    # --------------------------------------------------
+    # GROUP BY
+    # --------------------------------------------------
 
     if operation == "group_by":
         group_column = plan.get("column")
@@ -87,14 +91,52 @@ def validate_plan(
                 dataframe[metric_column]
             ):
                 raise ValueError(
-                    f"Column '{metric_column}' "
-                    f"must be numeric for "
-                    f"aggregation '{aggregation}'"
+                    f"Column '{metric_column}' must be numeric "
+                    f"for aggregation '{aggregation}'"
                 )
+
+        descending = plan.get(
+            "descending",
+            False,
+        )
+
+        if not isinstance(
+            descending,
+            bool,
+        ):
+            raise ValueError(
+                "'descending' must be a boolean"
+            )
+
+        limit = plan.get("limit")
+
+        if limit is not None:
+            if not isinstance(
+                limit,
+                int,
+            ):
+                raise ValueError(
+                    "Group-by limit must be an integer"
+                )
+
+            if limit <= 0:
+                raise ValueError(
+                    "Group-by limit must be greater than 0"
+                )
+
+            if limit > 1000:
+                raise ValueError(
+                    "Group-by limit cannot exceed 1000"
+                )
+
+    # --------------------------------------------------
+    # FILTER
+    # --------------------------------------------------
 
     elif operation == "filter":
         column = plan.get("column")
         operator = plan.get("operator")
+        value = plan.get("value")
 
         _validate_column(
             dataframe,
@@ -107,7 +149,7 @@ def validate_plan(
                 f"Unsupported filter operator: {operator}"
             )
 
-        if plan.get("value") is None:
+        if value is None:
             raise ValueError(
                 "Filter requires a value"
             )
@@ -120,13 +162,21 @@ def validate_plan(
                 or pd.api.types.is_datetime64_any_dtype(series)
             ):
                 raise ValueError(
-                    f"Operator '{operator}' "
-                    f"requires a numeric or "
-                    f"datetime column"
+                    f"Operator '{operator}' requires a numeric "
+                    f"or datetime column"
                 )
+
+    # --------------------------------------------------
+    # SORT
+    # --------------------------------------------------
 
     elif operation == "sort":
         column = plan.get("column")
+        limit = plan.get("limit")
+        descending = plan.get(
+            "descending",
+            False,
+        )
 
         _validate_column(
             dataframe,
@@ -134,12 +184,19 @@ def validate_plan(
             "column",
         )
 
-        limit = plan.get("limit")
+        if not isinstance(
+            descending,
+            bool,
+        ):
+            raise ValueError(
+                "'descending' must be a boolean"
+            )
 
         if limit is not None:
-            try:
-                limit = int(limit)
-            except (TypeError, ValueError):
+            if not isinstance(
+                limit,
+                int,
+            ):
                 raise ValueError(
                     "Sort limit must be an integer"
                 )
@@ -148,6 +205,15 @@ def validate_plan(
                 raise ValueError(
                     "Sort limit must be greater than 0"
                 )
+
+            if limit > 1000:
+                raise ValueError(
+                    "Sort limit cannot exceed 1000"
+                )
+
+    # --------------------------------------------------
+    # CORRELATION
+    # --------------------------------------------------
 
     elif operation == "correlation":
         columns = plan.get("columns")
@@ -162,6 +228,11 @@ def validate_plan(
                 "Correlation requires at least 2 columns"
             )
 
+        if len(columns) != len(set(columns)):
+            raise ValueError(
+                "Correlation columns must be unique"
+            )
+
         for column in columns:
             _validate_column(
                 dataframe,
@@ -173,9 +244,16 @@ def validate_plan(
                 dataframe[column]
             ):
                 raise ValueError(
-                    f"Column '{column}' "
-                    f"must be numeric for correlation"
+                    f"Column '{column}' must be numeric "
+                    f"for correlation"
                 )
+
+        numeric_data = dataframe[columns]
+
+        if len(numeric_data.dropna()) < 2:
+            raise ValueError(
+                "Correlation requires at least 2 complete observations"
+            )
 
 
 def _clean_value(value):
@@ -192,7 +270,7 @@ def _clean_value(value):
     return value
 
 
-def _clean_records(records: list[dict]) -> list[dict]:
+def _clean_records(records):
     cleaned_records = []
 
     for record in records:
@@ -209,8 +287,7 @@ def _clean_records(records: list[dict]) -> list[dict]:
 def execute_plan(
     dataframe: pd.DataFrame,
     plan: dict,
-) -> dict:
-
+):
     validate_plan(
         plan,
         dataframe,
@@ -218,7 +295,19 @@ def execute_plan(
 
     operation = plan["operation"]
 
+    # --------------------------------------------------
+    # DESCRIBE
+    # --------------------------------------------------
+
     if operation == "describe":
+        if dataframe.empty:
+            return {
+                "operation": operation,
+                "result": {},
+                "row_count": 0,
+                "column_count": len(dataframe.columns),
+            }
+
         result = dataframe.describe(
             include="all"
         )
@@ -230,7 +319,13 @@ def execute_plan(
         return {
             "operation": operation,
             "result": result.to_dict(),
+            "row_count": len(dataframe),
+            "column_count": len(dataframe.columns),
         }
+
+    # --------------------------------------------------
+    # GROUP BY
+    # --------------------------------------------------
 
     if operation == "group_by":
         group_column = plan["column"]
@@ -239,10 +334,29 @@ def execute_plan(
 
         grouped = (
             dataframe
-            .groupby(group_column)[metric_column]
+            .groupby(
+                group_column,
+                dropna=False,
+            )[metric_column]
             .agg(aggregation)
             .reset_index()
         )
+
+        descending = plan.get(
+            "descending",
+            False,
+        )
+
+        grouped = grouped.sort_values(
+            by=metric_column,
+            ascending=not descending,
+            na_position="last",
+        )
+
+        limit = plan.get("limit")
+
+        if limit is not None:
+            grouped = grouped.head(limit)
 
         records = grouped.to_dict(
             orient="records"
@@ -253,8 +367,15 @@ def execute_plan(
             "group_column": group_column,
             "metric_column": metric_column,
             "aggregation": aggregation,
+            "descending": descending,
+            "limit": limit,
             "result": _clean_records(records),
+            "group_count": len(records),
         }
+
+    # --------------------------------------------------
+    # FILTER
+    # --------------------------------------------------
 
     if operation == "filter":
         column = plan["column"]
@@ -263,17 +384,30 @@ def execute_plan(
 
         series = dataframe[column]
 
-        if operator != "eq":
+        if pd.api.types.is_numeric_dtype(series):
             try:
-                value = pd.to_numeric(
-                    value
-                )
+                value = float(value)
             except (TypeError, ValueError):
                 raise ValueError(
-                    f"Value '{value}' "
-                    f"must be numeric for "
-                    f"operator '{operator}'"
+                    f"Value '{value}' must be numeric "
+                    f"for column '{column}'"
                 )
+
+        elif pd.api.types.is_datetime64_any_dtype(series):
+            try:
+                value = pd.to_datetime(value)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"Value '{value}' is not a valid "
+                    f"datetime for column '{column}'"
+                )
+
+        elif operator != "eq":
+            raise ValueError(
+                f"Operator '{operator}' cannot be used "
+                f"with non-numeric, non-datetime column "
+                f"'{column}'"
+            )
 
         if operator == "eq":
             filtered = dataframe[
@@ -300,8 +434,16 @@ def execute_plan(
                 series <= value
             ]
 
+        else:
+            raise ValueError(
+                f"Unsupported filter operator: {operator}"
+            )
+
         return {
             "operation": operation,
+            "column": column,
+            "operator": operator,
+            "value": _clean_value(value),
             "result": _clean_records(
                 filtered.to_dict(
                     orient="records"
@@ -309,6 +451,10 @@ def execute_plan(
             ),
             "row_count": len(filtered),
         }
+
+    # --------------------------------------------------
+    # SORT
+    # --------------------------------------------------
 
     if operation == "sort":
         column = plan["column"]
@@ -321,19 +467,21 @@ def execute_plan(
         sorted_dataframe = dataframe.sort_values(
             by=column,
             ascending=not descending,
+            na_position="last",
         )
 
         limit = plan.get("limit")
 
         if limit is not None:
             sorted_dataframe = (
-                sorted_dataframe.head(
-                    int(limit)
-                )
+                sorted_dataframe.head(limit)
             )
 
         return {
             "operation": operation,
+            "column": column,
+            "descending": descending,
+            "limit": limit,
             "result": _clean_records(
                 sorted_dataframe.to_dict(
                     orient="records"
@@ -341,11 +489,19 @@ def execute_plan(
             ),
         }
 
+    # --------------------------------------------------
+    # CORRELATION
+    # --------------------------------------------------
+
     if operation == "correlation":
         columns = plan["columns"]
 
+        correlation_data = dataframe[
+            columns
+        ]
+
         correlation = (
-            dataframe[columns]
+            correlation_data
             .corr()
             .fillna(0)
         )
@@ -361,6 +517,5 @@ def execute_plan(
         }
 
     raise ValueError(
-        f"Operation '{operation}' "
-        f"is not implemented"
+        f"Operation '{operation}' is not implemented"
     )

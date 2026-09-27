@@ -4,6 +4,7 @@ from sqlalchemy import BigInteger, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+
 from database import Base
 
 
@@ -47,6 +48,11 @@ class Analysis(Base):
         Text,
         nullable=True,
     )
+    
+    visualization: Mapped[dict | None] = mapped_column(
+    JSONB,
+    nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -55,3 +61,4 @@ class Analysis(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
     )
+    

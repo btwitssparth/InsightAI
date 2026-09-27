@@ -15,7 +15,8 @@ from app.services.storage import (
     download_dataset_file,
 )
 from app.services.supabase import supabase
-
+from app.models.dataset import Dataset
+from app.models.analysis import Analysis
 
 router = APIRouter(
     prefix="/datasets",
@@ -308,3 +309,41 @@ def profile_dataset_endpoint(
             status_code=500,
             detail=f"Could not profile dataset: {str(error)}",
         )
+@router.get("/{dataset_id}/analyses")
+def get_dataset_analyses(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+):
+    dataset = (
+        db.query(Dataset)
+        .filter(Dataset.id == dataset_id)
+        .first()
+    )
+
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found",
+        )
+
+    analyses = (
+        db.query(Analysis)
+        .filter(Analysis.dataset_id == dataset_id)
+        .order_by(Analysis.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "analysis_id": analysis.id,
+            "dataset_id": analysis.dataset_id,
+            "question": analysis.question,
+            "status": analysis.status,
+            "plan": analysis.plan,
+            "result": analysis.result,
+            "insight": analysis.insight,
+            "created_at": analysis.created_at,
+            "updated_at": analysis.updated_at,
+        }
+        for analysis in analyses
+    ]

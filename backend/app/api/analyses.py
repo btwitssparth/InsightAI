@@ -66,6 +66,7 @@ def _serialize_analysis(analysis: Analysis) -> dict:
         "insight": analysis.insight,
         "visualization": analysis.visualization,
         "error": analysis.error,
+        "attempt_count": analysis.attempt_count,
         "created_at": analysis.created_at,
         "updated_at": analysis.updated_at,
     }

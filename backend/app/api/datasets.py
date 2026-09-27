@@ -133,7 +133,10 @@ async def upload_dataset(
         if dataframe.shape[1] == 0:
             raise HTTPException(status_code=400, detail="Dataset has no columns")
 
-        validate_dataframe_resources(dataframe)
+        try:
+            validate_dataframe_resources(dataframe)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
         dataset_uuid = str(uuid.uuid4())
         storage_path = (
@@ -264,6 +267,7 @@ def preview_dataset(
         else:
             raise HTTPException(status_code=400, detail="Unsupported dataset type")
 
+        validate_dataframe_resources(dataframe)
         preview = dataframe.head(20).where(pd.notna(dataframe.head(20)), None)
         return {
             "dataset_id": dataset.id,

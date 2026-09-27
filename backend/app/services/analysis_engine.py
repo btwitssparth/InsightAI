@@ -2,6 +2,8 @@ import math
 
 import pandas as pd
 
+from app.services.resource_limits import truncate_result
+
 
 SUPPORTED_OPERATIONS = {
     "describe",
@@ -439,17 +441,21 @@ def execute_plan(
                 f"Unsupported filter operator: {operator}"
             )
 
+        output, truncated = truncate_result(filtered)
+
         return {
             "operation": operation,
             "column": column,
             "operator": operator,
             "value": _clean_value(value),
             "result": _clean_records(
-                filtered.to_dict(
+                output.to_dict(
                     orient="records"
                 )
             ),
             "row_count": len(filtered),
+            "returned_rows": len(output),
+            "truncated": truncated,
         }
 
     # --------------------------------------------------
@@ -472,16 +478,20 @@ def execute_plan(
 
         limit = plan.get("limit")
 
-        if limit is not None:
-            sorted_dataframe = (
-                sorted_dataframe.head(limit)
-            )
+        requested_limit = limit
+        if limit is None:
+            limit = 5000
+
+        sorted_dataframe = sorted_dataframe.head(limit)
+        truncated = requested_limit is None and len(dataframe) > len(sorted_dataframe)
 
         return {
             "operation": operation,
             "column": column,
             "descending": descending,
-            "limit": limit,
+            "limit": requested_limit,
+            "returned_rows": len(sorted_dataframe),
+            "truncated": truncated,
             "result": _clean_records(
                 sorted_dataframe.to_dict(
                     orient="records"

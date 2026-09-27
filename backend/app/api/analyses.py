@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -20,11 +20,10 @@ router = APIRouter(prefix="/analyses", tags=["Analyses"])
 
 
 def _get_owned_dataset(dataset_id: int, user_id: str, db: Session) -> Dataset:
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.id == dataset_id, Dataset.owner_id == user_id)
-        .first()
-    )
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.owner_id == user_id,
+    ).first()
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return dataset
@@ -44,12 +43,10 @@ def _get_owned_analysis(analysis_id: int, user_id: str, db: Session) -> Analysis
 
 def _load_dataframe(dataset: Dataset) -> pd.DataFrame:
     file_bytes = download_dataset_file(dataset.storage_path)
-
     if dataset.file_type == "csv":
         return pd.read_csv(BytesIO(file_bytes))
     if dataset.file_type == "xlsx":
         return pd.read_excel(BytesIO(file_bytes))
-
     raise HTTPException(status_code=400, detail="Unsupported dataset type")
 
 
@@ -63,6 +60,7 @@ def _serialize_analysis(analysis: Analysis) -> dict:
         "result": analysis.result,
         "insight": analysis.insight,
         "visualization": analysis.visualization,
+        "error": analysis.error,
         "created_at": analysis.created_at,
         "updated_at": analysis.updated_at,
     }
@@ -89,66 +87,33 @@ def get_analysis(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    analysis = _get_owned_analysis(analysis_id, current_user["id"], db)
-    return _serialize_analysis(analysis)
+    return _serialize_analysis(
+        _get_owned_analysis(analysis_id, current_user["id"], db)
+    )
 
 
-@router.post("/ask")
+@router.post("/ask", status_code=status.HTTP_202_ACCEPTED)
 def ask_analysis_question(
     request: AnalysisQuestionRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     dataset = _get_owned_dataset(request.dataset_id, current_user["id"], db)
+    now = datetime.now(timezone.utc)
 
-    try:
-        dataframe = _load_dataframe(dataset)
-        dataset_profile = profile_dataset(dataframe)
+    analysis = Analysis(
+        dataset_id=dataset.id,
+        question=request.question,
+        status="pending",
+        created_at=now,
+        updated_at=now,
+    )
 
-        plan = generate_analysis_plan(
-            question=request.question,
-            dataset_profile=dataset_profile,
-        )
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
 
-        result = execute_plan(
-            dataframe=dataframe,
-            plan=plan.model_dump(),
-        )
-
-        insight = generate_insight(
-            question=request.question,
-            result=result,
-        )
-
-        visualization = generate_visualization(result=result)
-
-        now = datetime.now(timezone.utc)
-        analysis = Analysis(
-            dataset_id=dataset.id,
-            question=request.question,
-            status="completed",
-            plan=plan.model_dump(),
-            result=result,
-            insight=insight,
-            visualization=visualization.model_dump() if visualization else None,
-            created_at=now,
-            updated_at=now,
-        )
-
-        db.add(analysis)
-        db.commit()
-        db.refresh(analysis)
-
-        return _serialize_analysis(analysis)
-
-    except HTTPException:
-        raise
-    except ValueError as error:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(error))
-    except Exception as error:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(error)}")
+    return _serialize_analysis(analysis)
 
 
 @router.post("/execute")
@@ -162,17 +127,8 @@ def execute_analysis(
     try:
         dataframe = _load_dataframe(dataset)
         plan = request.plan.model_dump()
-
-        result = execute_plan(
-            dataframe=dataframe,
-            plan=plan,
-        )
-
-        insight = generate_insight(
-            question=request.question,
-            result=result,
-        )
-
+        result = execute_plan(dataframe=dataframe, plan=plan)
+        insight = generate_insight(question=request.question, result=result)
         visualization = generate_visualization(result=result)
 
         now = datetime.now(timezone.utc)
@@ -184,6 +140,7 @@ def execute_analysis(
             result=result,
             insight=insight,
             visualization=visualization.model_dump() if visualization else None,
+            error=None,
             created_at=now,
             updated_at=now,
         )
@@ -191,7 +148,6 @@ def execute_analysis(
         db.add(analysis)
         db.commit()
         db.refresh(analysis)
-
         return _serialize_analysis(analysis)
 
     except HTTPException:
@@ -199,6 +155,9 @@ def execute_analysis(
     except ValueError as error:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(error))
-    except Exception as error:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(error)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Analysis failed. Please try again.",
+        )

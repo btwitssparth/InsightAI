@@ -13,6 +13,7 @@ from app.services.analysis_engine import execute_plan
 from app.services.insight_generator import generate_insight
 from app.services.planner import generate_analysis_plan
 from app.services.profiler import profile_dataset
+from app.services.resource_limits import validate_dataframe_resources
 from app.services.storage import download_dataset_file
 from app.services.visualization import generate_visualization
 
@@ -44,10 +45,14 @@ def _get_owned_analysis(analysis_id: int, user_id: str, db: Session) -> Analysis
 def _load_dataframe(dataset: Dataset) -> pd.DataFrame:
     file_bytes = download_dataset_file(dataset.storage_path)
     if dataset.file_type == "csv":
-        return pd.read_csv(BytesIO(file_bytes))
-    if dataset.file_type == "xlsx":
-        return pd.read_excel(BytesIO(file_bytes))
-    raise HTTPException(status_code=400, detail="Unsupported dataset type")
+        dataframe = pd.read_csv(BytesIO(file_bytes))
+    elif dataset.file_type == "xlsx":
+        dataframe = pd.read_excel(BytesIO(file_bytes))
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported dataset type")
+
+    validate_dataframe_resources(dataframe)
+    return dataframe
 
 
 def _serialize_analysis(analysis: Analysis) -> dict:

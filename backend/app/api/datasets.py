@@ -3,6 +3,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
+from pathlib import PurePath
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -20,6 +21,16 @@ logger = logging.getLogger("insightai.datasets")
 
 BUCKET_NAME = os.getenv("SUPABASE_BUCKET", "insightai-datasets")
 MAX_FILE_SIZE = 10 * 1024 * 1024
+ALLOWED_EXTENSIONS = {"csv", "xlsx"}
+ALLOWED_CONTENT_TYPES = {
+    "csv": {"text/csv", "application/csv", "text/plain", ""},
+    "xlsx": {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/octet-stream",
+        "",
+    },
+}
+EXCEL_MAGIC = b"PK"
 
 
 def _get_owned_dataset(dataset_id: int, user_id: str, db: Session) -> Dataset:
@@ -32,6 +43,43 @@ def _get_owned_dataset(dataset_id: int, user_id: str, db: Session) -> Dataset:
     return dataset
 
 
+def _get_safe_filename(filename: str) -> str:
+    # Keep only the basename so client-controlled paths cannot become part of
+    # the stored metadata or dataset name.
+    safe_name = PurePath(filename.replace("\", "/")).name.strip()
+    if not safe_name or safe_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    if len(safe_name) > 255:
+        raise HTTPException(status_code=400, detail="File name is too long")
+    return safe_name
+
+
+def _validate_csv(contents: bytes) -> None:
+    if b"\x00" in contents:
+        raise HTTPException(status_code=400, detail="Invalid CSV file")
+    try:
+        dataframe = pd.read_csv(BytesIO(contents), nrows=5)
+    except Exception as error:
+        logger.info("CSV validation failed: %s", error)
+        raise HTTPException(status_code=400, detail="Invalid CSV file") from error
+
+    if len(dataframe.columns) == 0:
+        raise HTTPException(status_code=400, detail="CSV file has no columns")
+
+
+def _validate_xlsx(contents: bytes) -> None:
+    if not contents.startswith(EXCEL_MAGIC):
+        raise HTTPException(status_code=400, detail="Invalid XLSX file")
+    try:
+        dataframe = pd.read_excel(BytesIO(contents), nrows=5)
+    except Exception as error:
+        logger.info("XLSX validation failed: %s", error)
+        raise HTTPException(status_code=400, detail="Invalid XLSX file") from error
+
+    if len(dataframe.columns) == 0:
+        raise HTTPException(status_code=400, detail="XLSX file has no columns")
+
+
 @router.post("/upload")
 async def upload_dataset(
     file: UploadFile = File(...),
@@ -41,13 +89,19 @@ async def upload_dataset(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
-    original_filename = file.filename
-    file_name = original_filename.lower()
+    original_filename = _get_safe_filename(file.filename)
+    extension = original_filename.rsplit(".", 1)[-1].lower()
 
-    if not file_name.endswith((".csv", ".xlsx")):
+    if extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail="Only CSV and XLSX files are supported",
+        )
+
+    if file.content_type not in ALLOWED_CONTENT_TYPES[extension]:
+        raise HTTPException(
+            status_code=400,
+            detail="File content type does not match the selected file format",
         )
 
     storage_path = None
@@ -55,28 +109,33 @@ async def upload_dataset(
     try:
         contents = await file.read()
 
+        if not contents:
+            raise HTTPException(status_code=400, detail="The uploaded file is empty")
+
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=413,
                 detail="File size exceeds the 10 MB upload limit",
             )
 
+        if extension == "csv":
+            _validate_csv(contents)
+            dataframe = pd.read_csv(BytesIO(contents))
+            content_type = "text/csv"
+        else:
+            _validate_xlsx(contents)
+            dataframe = pd.read_excel(BytesIO(contents))
+            content_type = (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        if dataframe.shape[1] == 0:
+            raise HTTPException(status_code=400, detail="Dataset has no columns")
+
         dataset_uuid = str(uuid.uuid4())
-        extension = original_filename.rsplit(".", 1)[-1].lower()
         storage_path = (
             f"datasets/{current_user['id']}/{dataset_uuid}/original.{extension}"
         )
-
-        content_type = (
-            "text/csv"
-            if extension == "csv"
-            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-        if extension == "csv":
-            dataframe = pd.read_csv(BytesIO(contents))
-        else:
-            dataframe = pd.read_excel(BytesIO(contents))
 
         profile = profile_dataset(dataframe)
 
@@ -127,10 +186,7 @@ async def upload_dataset(
                 supabase.storage.from_(BUCKET_NAME).remove([storage_path])
             except Exception:
                 logger.exception("Failed to clean up storage object %s", storage_path)
-        logger.exception(
-            "Dataset upload failed for user %s",
-            current_user["id"],
-        )
+        logger.exception("Dataset upload failed for user %s", current_user["id"])
         raise HTTPException(
             status_code=500,
             detail="Could not process dataset. Please check the file and try again.",

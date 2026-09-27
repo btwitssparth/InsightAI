@@ -14,18 +14,21 @@ export interface Dataset {
 }
 
 export interface DatasetPreview {
+  dataset_id: number
+  file_name: string
   columns: string[]
   rows: Record<string, unknown>[]
+  total_rows: number
 }
 
 export interface DatasetProfile {
-  columns: Record<string, unknown>
-  row_count: number
-  column_count: number
+  dataset_id: number
+  file_name: string
+  profile: Record<string, unknown>
 }
 
 export interface DatasetAnalysis {
-  id: number
+  analysis_id: number
   dataset_id: number
   question: string
   status: string

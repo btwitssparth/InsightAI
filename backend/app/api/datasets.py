@@ -7,98 +7,79 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
+from app.models.analysis import Analysis
 from app.models.dataset import Dataset
 from app.services.profiler import profile_dataset
-from app.services.storage import (
-    upload_dataset_file,
-    download_dataset_file,
-)
+from app.services.storage import download_dataset_file, upload_dataset_file
 from app.services.supabase import supabase
-from app.models.dataset import Dataset
-from app.models.analysis import Analysis
 
-router = APIRouter(
-    prefix="/datasets",
-    tags=["Datasets"],
-)
+router = APIRouter(prefix="/datasets", tags=["Datasets"])
+
+BUCKET_NAME = os.getenv("SUPABASE_BUCKET", "insightai-datasets")
+MAX_FILE_SIZE = 10 * 1024 * 1024
 
 
-BUCKET_NAME = os.getenv(
-    "SUPABASE_BUCKET",
-    "insightai-datasets",
-)
-
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+def _get_owned_dataset(dataset_id: int, user_id: str, db: Session) -> Dataset:
+    dataset = (
+        db.query(Dataset)
+        .filter(Dataset.id == dataset_id, Dataset.owner_id == user_id)
+        .first()
+    )
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return dataset
 
 
 @router.post("/upload")
 async def upload_dataset(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="No file provided",
-        )
+        raise HTTPException(status_code=400, detail="No file provided")
 
     original_filename = file.filename
     file_name = original_filename.lower()
 
     if not file_name.endswith((".csv", ".xlsx")):
-        raise HTTPException(
-            status_code=400,
-            detail="Only CSV and XLSX files are supported",
-        )
+        raise HTTPException(status_code=400, detail="Only CSV and XLSX files are supported")
+
+    storage_path = None
 
     try:
-        # Read uploaded file
         contents = await file.read()
 
-        # Enforce our current Supabase bucket limit
         if len(contents) > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail="File size exceeds the 10 MB upload limit",
-            )
+            raise HTTPException(status_code=400, detail="File size exceeds the 10 MB upload limit")
 
-        # Generate a unique dataset ID for the storage path
         dataset_uuid = str(uuid.uuid4())
-
         extension = original_filename.rsplit(".", 1)[-1].lower()
+        storage_path = f"datasets/{current_user['id']}/{dataset_uuid}/original.{extension}"
 
-        storage_path = (
-            f"datasets/{dataset_uuid}/original.{extension}"
+        content_type = (
+            "text/csv"
+            if extension == "csv"
+            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        # Determine MIME type
-        if extension == "csv":
-            content_type = "text/csv"
-        else:
-            content_type = (
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            )
-
-        # Parse the dataset
         if extension == "csv":
             dataframe = pd.read_csv(BytesIO(contents))
         else:
             dataframe = pd.read_excel(BytesIO(contents))
 
-        # Profile dataset
         profile = profile_dataset(dataframe)
 
-        # Upload original file to Supabase Storage
         upload_dataset_file(
             file_bytes=contents,
             storage_path=storage_path,
             content_type=content_type,
         )
 
-        # Create database record
+        now = datetime.now(timezone.utc)
         dataset = Dataset(
+            owner_id=current_user["id"],
             name=original_filename.rsplit(".", 1)[0],
             file_name=original_filename,
             file_type=extension,
@@ -107,8 +88,8 @@ async def upload_dataset(
             row_count=len(dataframe),
             column_count=len(dataframe.columns),
             status="ready",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=now,
+            updated_at=now,
         )
 
         db.add(dataset)
@@ -130,29 +111,24 @@ async def upload_dataset(
 
     except HTTPException:
         raise
-
     except Exception as error:
         db.rollback()
+        if storage_path:
+            try:
+                supabase.storage.from_(BUCKET_NAME).remove([storage_path])
+            except Exception:
+                pass
+        raise HTTPException(status_code=400, detail=f"Could not process dataset: {str(error)}")
 
-        # Try to clean up the Storage object if the database operation failed
-        try:
-            supabase.storage.from_(BUCKET_NAME).remove(
-                [storage_path]
-            )
-        except Exception:
-            pass
-
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not process dataset: {str(error)}",
-        )
 
 @router.get("/")
 def get_datasets(
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     datasets = (
         db.query(Dataset)
+        .filter(Dataset.owner_id == current_user["id"])
         .order_by(Dataset.created_at.desc())
         .all()
     )
@@ -171,23 +147,16 @@ def get_datasets(
             "updated_at": dataset.updated_at,
         }
         for dataset in datasets
-    ]      
+    ]
+
+
 @router.get("/{dataset_id}")
 def get_dataset(
     dataset_id: int,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.id == dataset_id)
-        .first()
-    )
-
-    if not dataset:
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset not found",
-        )
+    dataset = _get_owned_dataset(dataset_id, current_user["id"], db)
 
     return {
         "id": dataset.id,
@@ -203,42 +172,26 @@ def get_dataset(
         "updated_at": dataset.updated_at,
     }
 
+
 @router.get("/{dataset_id}/preview")
 def preview_dataset(
     dataset_id: int,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.id == dataset_id)
-        .first()
-    )
-
-    if not dataset:
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset not found",
-        )
+    dataset = _get_owned_dataset(dataset_id, current_user["id"], db)
 
     try:
-        file_bytes = download_dataset_file(
-            dataset.storage_path
-        )
+        file_bytes = download_dataset_file(dataset.storage_path)
 
         if dataset.file_type == "csv":
             dataframe = pd.read_csv(BytesIO(file_bytes))
         elif dataset.file_type == "xlsx":
             dataframe = pd.read_excel(BytesIO(file_bytes))
         else:
-            raise HTTPException(
-                status_code=400,
-                detail="Unsupported dataset type",
-            )
+            raise HTTPException(status_code=400, detail="Unsupported dataset type")
 
-        preview = dataframe.head(20).where(
-            pd.notna(dataframe.head(20)),
-            None,
-        )
+        preview = dataframe.head(20).where(pd.notna(dataframe.head(20)), None)
 
         return {
             "dataset_id": dataset.id,
@@ -247,88 +200,52 @@ def preview_dataset(
             "rows": preview.to_dict(orient="records"),
             "total_rows": len(dataframe),
         }
-
     except HTTPException:
         raise
-
     except Exception as error:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not preview dataset: {str(error)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Could not preview dataset: {str(error)}")
+
+
 @router.get("/{dataset_id}/profile")
 def profile_dataset_endpoint(
     dataset_id: int,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.id == dataset_id)
-        .first()
-    )
-
-    if not dataset:
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset not found",
-        )
+    dataset = _get_owned_dataset(dataset_id, current_user["id"], db)
 
     try:
-        # Download original file from Supabase Storage
-        file_bytes = download_dataset_file(
-            dataset.storage_path
-        )
+        file_bytes = download_dataset_file(dataset.storage_path)
 
-        # Parse file
         if dataset.file_type == "csv":
             dataframe = pd.read_csv(BytesIO(file_bytes))
-
         elif dataset.file_type == "xlsx":
             dataframe = pd.read_excel(BytesIO(file_bytes))
-
         else:
-            raise HTTPException(
-                status_code=400,
-                detail="Unsupported dataset type",
-            )
-
-        # Generate profile
-        profile = profile_dataset(dataframe)
+            raise HTTPException(status_code=400, detail="Unsupported dataset type")
 
         return {
             "dataset_id": dataset.id,
             "file_name": dataset.file_name,
-            "profile": profile,
+            "profile": profile_dataset(dataframe),
         }
-
     except HTTPException:
         raise
-
     except Exception as error:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not profile dataset: {str(error)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Could not profile dataset: {str(error)}")
+
+
 @router.get("/{dataset_id}/analyses")
 def get_dataset_analyses(
     dataset_id: int,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.id == dataset_id)
-        .first()
-    )
-
-    if not dataset:
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset not found",
-        )
+    dataset = _get_owned_dataset(dataset_id, current_user["id"], db)
 
     analyses = (
         db.query(Analysis)
-        .filter(Analysis.dataset_id == dataset_id)
+        .filter(Analysis.dataset_id == dataset.id)
         .order_by(Analysis.created_at.desc())
         .all()
     )
@@ -342,6 +259,7 @@ def get_dataset_analyses(
             "plan": analysis.plan,
             "result": analysis.result,
             "insight": analysis.insight,
+            "visualization": analysis.visualization,
             "created_at": analysis.created_at,
             "updated_at": analysis.updated_at,
         }

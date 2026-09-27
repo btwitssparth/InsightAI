@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -15,17 +16,17 @@ from app.services.storage import download_dataset_file, upload_dataset_file
 from app.services.supabase import supabase
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
+logger = logging.getLogger("insightai.datasets")
 
 BUCKET_NAME = os.getenv("SUPABASE_BUCKET", "insightai-datasets")
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
 
 def _get_owned_dataset(dataset_id: int, user_id: str, db: Session) -> Dataset:
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.id == dataset_id, Dataset.owner_id == user_id)
-        .first()
-    )
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.owner_id == user_id,
+    ).first()
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return dataset
@@ -44,7 +45,10 @@ async def upload_dataset(
     file_name = original_filename.lower()
 
     if not file_name.endswith((".csv", ".xlsx")):
-        raise HTTPException(status_code=400, detail="Only CSV and XLSX files are supported")
+        raise HTTPException(
+            status_code=400,
+            detail="Only CSV and XLSX files are supported",
+        )
 
     storage_path = None
 
@@ -52,11 +56,16 @@ async def upload_dataset(
         contents = await file.read()
 
         if len(contents) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=400, detail="File size exceeds the 10 MB upload limit")
+            raise HTTPException(
+                status_code=413,
+                detail="File size exceeds the 10 MB upload limit",
+            )
 
         dataset_uuid = str(uuid.uuid4())
         extension = original_filename.rsplit(".", 1)[-1].lower()
-        storage_path = f"datasets/{current_user['id']}/{dataset_uuid}/original.{extension}"
+        storage_path = (
+            f"datasets/{current_user['id']}/{dataset_uuid}/original.{extension}"
+        )
 
         content_type = (
             "text/csv"
@@ -111,14 +120,21 @@ async def upload_dataset(
 
     except HTTPException:
         raise
-    except Exception as error:
+    except Exception:
         db.rollback()
         if storage_path:
             try:
                 supabase.storage.from_(BUCKET_NAME).remove([storage_path])
             except Exception:
-                pass
-        raise HTTPException(status_code=400, detail=f"Could not process dataset: {str(error)}")
+                logger.exception("Failed to clean up storage object %s", storage_path)
+        logger.exception(
+            "Dataset upload failed for user %s",
+            current_user["id"],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Could not process dataset. Please check the file and try again.",
+        )
 
 
 @router.get("/")
@@ -157,7 +173,6 @@ def get_dataset(
     current_user: dict = Depends(get_current_user),
 ):
     dataset = _get_owned_dataset(dataset_id, current_user["id"], db)
-
     return {
         "id": dataset.id,
         "name": dataset.name,
@@ -183,7 +198,6 @@ def preview_dataset(
 
     try:
         file_bytes = download_dataset_file(dataset.storage_path)
-
         if dataset.file_type == "csv":
             dataframe = pd.read_csv(BytesIO(file_bytes))
         elif dataset.file_type == "xlsx":
@@ -192,7 +206,6 @@ def preview_dataset(
             raise HTTPException(status_code=400, detail="Unsupported dataset type")
 
         preview = dataframe.head(20).where(pd.notna(dataframe.head(20)), None)
-
         return {
             "dataset_id": dataset.id,
             "file_name": dataset.file_name,
@@ -202,8 +215,12 @@ def preview_dataset(
         }
     except HTTPException:
         raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Could not preview dataset: {str(error)}")
+    except Exception:
+        logger.exception("Could not preview dataset %s", dataset_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not preview dataset. Please try again.",
+        )
 
 
 @router.get("/{dataset_id}/profile")
@@ -216,7 +233,6 @@ def profile_dataset_endpoint(
 
     try:
         file_bytes = download_dataset_file(dataset.storage_path)
-
         if dataset.file_type == "csv":
             dataframe = pd.read_csv(BytesIO(file_bytes))
         elif dataset.file_type == "xlsx":
@@ -231,8 +247,12 @@ def profile_dataset_endpoint(
         }
     except HTTPException:
         raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Could not profile dataset: {str(error)}")
+    except Exception:
+        logger.exception("Could not profile dataset %s", dataset_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not profile dataset. Please try again.",
+        )
 
 
 @router.get("/{dataset_id}/analyses")
@@ -260,6 +280,7 @@ def get_dataset_analyses(
             "result": analysis.result,
             "insight": analysis.insight,
             "visualization": analysis.visualization,
+            "error": analysis.error,
             "created_at": analysis.created_at,
             "updated_at": analysis.updated_at,
         }

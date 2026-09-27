@@ -7,9 +7,5 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-<<<<<<< HEAD
   plugins: [react(),tailwindcss()],
-=======
-  plugins: [react(), tailwindcss()],
->>>>>>> 165e84b0d34db2c1c56bf1596b57fe7cde0905e8
 })

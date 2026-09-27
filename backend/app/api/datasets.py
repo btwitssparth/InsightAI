@@ -31,7 +31,7 @@ ALLOWED_CONTENT_TYPES = {
         "",
     },
 }
-EXCEL_MAGIC = b"PK"
+EXCEL_MAGIC = b"PK\x03\x04"
 
 
 def _get_owned_dataset(dataset_id: int, user_id: str, db: Session) -> Dataset:
@@ -47,7 +47,7 @@ def _get_owned_dataset(dataset_id: int, user_id: str, db: Session) -> Dataset:
 def _get_safe_filename(filename: str) -> str:
     # Keep only the basename so client-controlled paths cannot become part of
     # the stored metadata or dataset name.
-    safe_name = PurePath(filename.replace("\", "/")).name.strip()
+    safe_name = PurePath(filename.replace("\\", "/")).name.strip()
     if not safe_name or safe_name in {".", ".."}:
         raise HTTPException(status_code=400, detail="Invalid file name")
     if len(safe_name) > 255:

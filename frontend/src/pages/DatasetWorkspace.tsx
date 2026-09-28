@@ -164,18 +164,6 @@ export default function DatasetWorkspace() {
     ? columns.find((column) => column.name === selectedColumn) ?? null
     : null
 
-  const automaticOverview = useMemo(() => {
-    const numericColumns = columns.filter((column) => isNumericType(column.data_type))
-    const columnsWithMissing = columns
-      .filter((column) => column.missing > 0)
-      .sort((a, b) => b.missing - a.missing)
-
-    return {
-      numericNames: numericColumns.map((column) => column.name),
-      missingColumns: columnsWithMissing.map((column) => column.name),
-    }
-  }, [columns])
-
   if (loading) {
     return (
       <section className="mx-auto max-w-7xl px-5 py-9 md:px-8">
@@ -301,76 +289,45 @@ export default function DatasetWorkspace() {
 
         <div className="mt-6 rounded-xl border border-[#e5e5e3] bg-white">
           <div className="border-b border-[#ededeb] px-5 py-4">
-            <h2 className="text-sm font-semibold text-[#292927]">Automatic dataset overview</h2>
+            <h2 className="text-sm font-semibold text-[#292927]">Suggested analysis directions</h2>
             <p className="mt-0.5 text-xs text-[#90908b]">
-              A deterministic summary generated from the dataset profile. No AI request is used.
+              Useful questions based on the fields detected in this dataset.
             </p>
           </div>
 
-          <div className="grid gap-5 px-5 py-5 lg:grid-cols-[1.35fr_0.85fr]">
-            <div>
-              <p className="text-xs font-medium text-[#555550]">What we found</p>
-              <ul className="mt-3 space-y-3">
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#777772]" />
-                  <p className="text-sm leading-6 text-[#666660]">
-                    {profileSummary.totalRows.toLocaleString()} rows across {columns.length.toLocaleString()} columns were profiled.
-                  </p>
-                </li>
-                <li className="flex items-start gap-3">
-                  {profileSummary.missingCells > 0 ? (
-                    <CircleAlert size={16} className="mt-0.5 shrink-0 text-[#806957]" />
-                  ) : (
-                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#777772]" />
-                  )}
-                  <p className="text-sm leading-6 text-[#666660]">
-                    {profileSummary.missingCells > 0
-                      ? profileSummary.missingCells.toLocaleString() + " missing cells were detected (" + profileSummary.missingPercentage.toFixed(1) + "% of all cells)."
-                      : "No missing cells were detected."}
-                  </p>
-                </li>
-                <li className="flex items-start gap-3">
-                  {profileSummary.duplicateRows > 0 ? (
-                    <CircleAlert size={16} className="mt-0.5 shrink-0 text-[#806957]" />
-                  ) : (
-                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#777772]" />
-                  )}
-                  <p className="text-sm leading-6 text-[#666660]">
-                    {profileSummary.duplicateRows > 0
-                      ? profileSummary.duplicateRows.toLocaleString() + " exact duplicate rows were detected."
-                      : "No exact duplicate rows were detected."}
-                  </p>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[#777772]" />
-                  <p className="text-sm leading-6 text-[#666660]">
-                    {profileSummary.numericColumns} numeric {profileSummary.numericColumns === 1 ? "field" : "fields"} and {profileSummary.categoricalColumns} non-numeric {profileSummary.categoricalColumns === 1 ? "field" : "fields"} were identified.
-                  </p>
-                </li>
-              </ul>
-            </div>
+          <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
+            <Link
+              to={`/datasets/${dataset.id}/analyze`}
+              state={{ suggestedQuestion: 'How does money vary across coffee names?' }}
+              className="rounded-lg border border-[#e5e5e3] p-4 transition-colors hover:border-[#cfcfcb] hover:bg-[#fafaf8]"
+            >
+              <p className="text-xs font-medium text-[#353532]">Compare categories</p>
+              <p className="mt-1.5 text-xs leading-5 text-[#858580]">
+                Compare the numeric measure across your categorical fields.
+              </p>
+            </Link>
 
-            <div className="rounded-lg border border-[#ededeb] bg-[#fafaf8] p-4">
-              <p className="text-xs font-medium text-[#555550]">Key fields</p>
-              <div className="mt-3 space-y-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#999994]">Numeric</p>
-                  <p className="mt-1 text-xs leading-5 text-[#666660]">
-                    {automaticOverview.numericNames.length > 0
-                      ? automaticOverview.numericNames.join(", ")
-                      : "No numeric fields detected."}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#999994]">Columns with missing data</p>
-                  <p className="mt-1 text-xs leading-5 text-[#666660]">
-                    {automaticOverview.missingColumns.length > 0
-                      ? automaticOverview.missingColumns.join(", ")
-                      : "None"}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <Link
+              to={`/datasets/${dataset.id}/analyze`}
+              state={{ suggestedQuestion: 'How does money change over time?' }}
+              className="rounded-lg border border-[#e5e5e3] p-4 transition-colors hover:border-[#cfcfcb] hover:bg-[#fafaf8]"
+            >
+              <p className="text-xs font-medium text-[#353532]">Explore trends</p>
+              <p className="mt-1.5 text-xs leading-5 text-[#858580]">
+                Look for changes in the numeric measure across dates.
+              </p>
+            </Link>
+
+            <Link
+              to={`/datasets/${dataset.id}/analyze`}
+              state={{ suggestedQuestion: 'Which columns have missing values?' }}
+              className="rounded-lg border border-[#e5e5e3] p-4 transition-colors hover:border-[#cfcfcb] hover:bg-[#fafaf8]"
+            >
+              <p className="text-xs font-medium text-[#353532]">Check data completeness</p>
+              <p className="mt-1.5 text-xs leading-5 text-[#858580]">
+                Identify where missing values occur before deeper analysis.
+              </p>
+            </Link>
           </div>
         </div>
 

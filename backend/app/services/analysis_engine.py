@@ -264,50 +264,6 @@ def validate_plan(
             raise ValueError(f"Comparison value(s) not found in '{group_column}': {missing}")
 
     # --------------------------------------------------
-    # SHARE
-    # --------------------------------------------------
-
-    if operation == "share":
-        group_column = plan["column"]
-        metric_column = plan["metric_column"]
-        aggregation = plan["aggregation"]
-
-        grouped = (
-            dataframe
-            .groupby(group_column, dropna=False)[metric_column]
-            .agg(aggregation)
-            .reset_index()
-        )
-
-        total = grouped[metric_column].sum()
-        if pd.isna(total):
-            raise ValueError("Share calculation produced no total")
-
-        records = []
-        for record in grouped.to_dict(orient="records"):
-            category = record[group_column]
-            value = _clean_value(record[metric_column])
-            if value is None:
-                continue
-            share = None if total == 0 else (float(value) / float(total)) * 100
-            records.append({
-                "category": None if pd.isna(category) else str(category),
-                "value": value,
-                "percentage_share": _clean_value(share),
-            })
-
-        records.sort(key=lambda item: item["value"], reverse=True)
-
-        return {
-            "operation": operation,
-            "group_column": group_column,
-            "metric_column": metric_column,
-            "aggregation": aggregation,
-            "total": _clean_value(total),
-            "result": records,
-        }
-
-    # --------------------------------------------------
     # COMPARE
     # --------------------------------------------------
 
@@ -432,6 +388,50 @@ def execute_plan(
     )
 
     operation = plan["operation"]
+
+    # --------------------------------------------------
+    # SHARE
+    # --------------------------------------------------
+
+    if operation == "share":
+        group_column = plan["column"]
+        metric_column = plan["metric_column"]
+        aggregation = plan["aggregation"]
+
+        grouped = (
+            dataframe
+            .groupby(group_column, dropna=False)[metric_column]
+            .agg(aggregation)
+            .reset_index()
+        )
+
+        total = grouped[metric_column].sum()
+        if pd.isna(total):
+            raise ValueError("Share calculation produced no total")
+
+        records = []
+        for record in grouped.to_dict(orient="records"):
+            category = record[group_column]
+            value = _clean_value(record[metric_column])
+            if value is None:
+                continue
+            share = None if total == 0 else (float(value) / float(total)) * 100
+            records.append({
+                "category": None if pd.isna(category) else str(category),
+                "value": value,
+                "percentage_share": _clean_value(share),
+            })
+
+        records.sort(key=lambda item: item["value"], reverse=True)
+
+        return {
+            "operation": operation,
+            "group_column": group_column,
+            "metric_column": metric_column,
+            "aggregation": aggregation,
+            "total": _clean_value(total),
+            "result": records,
+        }
 
     # --------------------------------------------------
     # DESCRIBE

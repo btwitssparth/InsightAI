@@ -3,6 +3,7 @@ import { AppShell } from './components/layout/AppShell'
 import { RequireAuth } from './components/auth/RequireAuth'
 import AuthCallback from './pages/AuthCallback'
 import Dashboard from './pages/Dashboard'
+import Datasets from './pages/Datasets'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import './App.css'
@@ -29,7 +30,7 @@ function App() {
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/datasets" element={<Placeholder title="Datasets" />} />
+            <Route path="/datasets" element={<Datasets />} />
             <Route path="/datasets/:datasetId" element={<Placeholder title="Dataset workspace" />} />
             <Route path="/analyses/:analysisId" element={<Placeholder title="Analysis" />} />
             <Route path="/history" element={<Placeholder title="Analysis history" />} />

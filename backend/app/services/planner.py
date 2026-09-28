@@ -26,7 +26,7 @@ The JSON object MUST contain exactly these possible fields:
   "column": "string or null",
   "metric_column": "string or null",
   "aggregation": "sum | mean | min | max | count | null",
-  "operator": "eq | gt | gte | lt | lte | null",
+  "operator": "eq | gt | gte | lt | lte | between | null",
   "value": "string | number | [string | number, string | number] | null",
   "comparison_values": ["string | number", "string | number"] or null,
   "descending": true or false,
@@ -41,7 +41,7 @@ IMPORTANT:
 1. Never invent column names.
 2. Use ONLY column names present in DATASET PROFILE.
 3. Do not nest objects inside column, metric_column, aggregation,
-   operator, value, descending, or limit.
+   operator, value, descending, rank, or limit.
 4. "column" MUST always be a plain string or null.
 5. "metric_column" MUST always be a plain string or null.
 6. "aggregation" MUST always be a plain string or null.
@@ -77,6 +77,15 @@ Use when the user asks for a category/product/group's percentage share of a tota
 
 difference
 Use when the user asks how much higher, lower, greater, or smaller one category/product/group is than another, including absolute or percentage differences. Use exactly two comparison_values. Preserve the order of the two categories from the question. Never calculate the difference yourself.
+
+top_n
+Use for the top/bottom N categories by an aggregate. Set rank=true, set limit to N, and use descending=true for top/highest or false for bottom/lowest.
+
+percentage_change
+Use when the user asks how much a value changed between exactly two categories or periods. Preserve the order stated by the user. The engine calculates the percentage.
+
+time_group
+Use for daily, weekly, monthly, quarterly, or yearly aggregation over a date/datetime column. Put the date column in column, the metric in metric_column, and the period in period.
 
 IMPORTANT EXAMPLES:
 

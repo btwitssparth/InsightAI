@@ -13,7 +13,7 @@ def generate_visualization(
     # GROUP BY
     # --------------------------------------------------
 
-    if operation == "group_by":
+    if operation in {"group_by", "top_n"}:
         records = result.get(
             "result",
             [],

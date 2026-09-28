@@ -22,7 +22,7 @@ You MUST return ONLY a JSON OBJECT.
 The JSON object MUST contain exactly these possible fields:
 
 {{
-  "operation": "describe | group_by | filter | sort | correlation | compare | share",
+  "operation": "describe | group_by | filter | sort | correlation | compare | share | difference",
   "column": "string or null",
   "metric_column": "string or null",
   "aggregation": "sum | mean | min | max | count | null",
@@ -72,6 +72,9 @@ Use when the user explicitly asks to compare exactly two categories/products/gro
 
 share
 Use when the user asks for a category/product/group's percentage share of a total, including questions such as "what percentage of total revenue is Laptop?" or "compare products and give their percentage share". Put the category column in "column", the numeric metric in "metric_column", and the aggregation in "aggregation". The engine will calculate the total and percentage shares; never calculate percentages yourself.
+
+difference
+Use when the user asks how much higher, lower, greater, or smaller one category/product/group is than another, including absolute or percentage differences. Use exactly two comparison_values. Preserve the order of the two categories from the question. Never calculate the difference yourself.
 
 IMPORTANT EXAMPLES:
 

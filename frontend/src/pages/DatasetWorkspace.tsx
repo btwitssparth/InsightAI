@@ -182,7 +182,7 @@ export default function DatasetWorkspace() {
           </div>
 
           <Link
-            to={`/analyses/new?dataset=${dataset.id}`}
+            to={`/datasets/${dataset.id}/analyze`}
             className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white hover:bg-[#30302e]"
           >
             <MessageSquare size={16} />

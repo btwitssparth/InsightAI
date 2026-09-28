@@ -10,6 +10,7 @@ class AnalysisPlan(BaseModel):
         "filter",
         "sort",
         "correlation",
+        "compare",
     ]
 
     column: str | None = None
@@ -33,6 +34,8 @@ class AnalysisPlan(BaseModel):
     ] | None = None
 
     value: str | int | float | None = None
+
+    comparison_values: list[str | int | float] | None = None
 
     descending: bool = False
 
@@ -83,6 +86,16 @@ class AnalysisPlan(BaseModel):
                 raise ValueError(
                     "sort requires 'column'"
                 )
+
+        elif self.operation == "compare":
+            if not self.column:
+                raise ValueError("compare requires 'column'")
+            if not self.metric_column:
+                raise ValueError("compare requires 'metric_column'")
+            if not self.aggregation:
+                raise ValueError("compare requires 'aggregation'")
+            if not self.comparison_values or len(self.comparison_values) != 2:
+                raise ValueError("compare requires exactly two comparison_values")
 
         elif self.operation == "correlation":
             if not self.columns:

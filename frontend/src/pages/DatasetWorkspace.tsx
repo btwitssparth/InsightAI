@@ -256,13 +256,13 @@ export default function DatasetWorkspace() {
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-[#e5e5e3] bg-white p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#999994]">Data quality</p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <p className="text-2xl font-semibold tracking-[-0.03em] text-[#292927]">
-                {profileSummary.missingPercentage.toFixed(1)}%
-              </p>
-              <span className="text-[11px] text-[#888883]">missing cells</span>
-            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#999994]">Missing data</p>
+            <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-[#292927]">
+              {profileSummary.missingCells.toLocaleString()}
+            </p>
+            <p className="mt-1 text-[11px] text-[#888883]">
+              {profileSummary.missingPercentage.toFixed(1)}% of all cells
+            </p>
           </div>
           <div className="rounded-xl border border-[#e5e5e3] bg-white p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#999994]">Duplicates</p>

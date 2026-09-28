@@ -12,6 +12,7 @@ SUPPORTED_OPERATIONS = {
     "sort",
     "correlation",
     "compare",
+    "share",
 }
 
 SUPPORTED_AGGREGATIONS = {
@@ -215,6 +216,24 @@ def validate_plan(
                 )
 
     # --------------------------------------------------
+    # SHARE
+    # --------------------------------------------------
+
+    elif operation == "share":
+        group_column = plan.get("column")
+        metric_column = plan.get("metric_column")
+        aggregation = plan.get("aggregation")
+
+        _validate_column(dataframe, group_column, "column")
+        _validate_column(dataframe, metric_column, "metric_column")
+
+        if aggregation not in SUPPORTED_AGGREGATIONS:
+            raise ValueError(f"Unsupported aggregation: {aggregation}")
+
+        if aggregation in {"sum", "mean", "min", "max"} and not pd.api.types.is_numeric_dtype(dataframe[metric_column]):
+            raise ValueError(f"Column '{metric_column}' must be numeric for aggregation '{aggregation}'")
+
+    # --------------------------------------------------
     # COMPARE
     # --------------------------------------------------
 
@@ -243,6 +262,50 @@ def validate_plan(
         missing = [value for value in comparison_values if value not in available]
         if missing:
             raise ValueError(f"Comparison value(s) not found in '{group_column}': {missing}")
+
+    # --------------------------------------------------
+    # SHARE
+    # --------------------------------------------------
+
+    if operation == "share":
+        group_column = plan["column"]
+        metric_column = plan["metric_column"]
+        aggregation = plan["aggregation"]
+
+        grouped = (
+            dataframe
+            .groupby(group_column, dropna=False)[metric_column]
+            .agg(aggregation)
+            .reset_index()
+        )
+
+        total = grouped[metric_column].sum()
+        if pd.isna(total):
+            raise ValueError("Share calculation produced no total")
+
+        records = []
+        for record in grouped.to_dict(orient="records"):
+            category = record[group_column]
+            value = _clean_value(record[metric_column])
+            if value is None:
+                continue
+            share = None if total == 0 else (float(value) / float(total)) * 100
+            records.append({
+                "category": None if pd.isna(category) else str(category),
+                "value": value,
+                "percentage_share": _clean_value(share),
+            })
+
+        records.sort(key=lambda item: item["value"], reverse=True)
+
+        return {
+            "operation": operation,
+            "group_column": group_column,
+            "metric_column": metric_column,
+            "aggregation": aggregation,
+            "total": _clean_value(total),
+            "result": records,
+        }
 
     # --------------------------------------------------
     # COMPARE

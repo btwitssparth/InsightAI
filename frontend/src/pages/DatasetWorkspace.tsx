@@ -287,50 +287,6 @@ export default function DatasetWorkspace() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-xl border border-[#e5e5e3] bg-white">
-          <div className="border-b border-[#ededeb] px-5 py-4">
-            <h2 className="text-sm font-semibold text-[#292927]">Suggested analysis directions</h2>
-            <p className="mt-0.5 text-xs text-[#90908b]">
-              Useful questions based on the fields detected in this dataset.
-            </p>
-          </div>
-
-          <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
-            <Link
-              to={`/datasets/${dataset.id}/analyze`}
-              state={{ suggestedQuestion: 'How does money vary across coffee names?' }}
-              className="rounded-lg border border-[#e5e5e3] p-4 transition-colors hover:border-[#cfcfcb] hover:bg-[#fafaf8]"
-            >
-              <p className="text-xs font-medium text-[#353532]">Compare categories</p>
-              <p className="mt-1.5 text-xs leading-5 text-[#858580]">
-                Compare the numeric measure across your categorical fields.
-              </p>
-            </Link>
-
-            <Link
-              to={`/datasets/${dataset.id}/analyze`}
-              state={{ suggestedQuestion: 'How does money change over time?' }}
-              className="rounded-lg border border-[#e5e5e3] p-4 transition-colors hover:border-[#cfcfcb] hover:bg-[#fafaf8]"
-            >
-              <p className="text-xs font-medium text-[#353532]">Explore trends</p>
-              <p className="mt-1.5 text-xs leading-5 text-[#858580]">
-                Look for changes in the numeric measure across dates.
-              </p>
-            </Link>
-
-            <Link
-              to={`/datasets/${dataset.id}/analyze`}
-              state={{ suggestedQuestion: 'Which columns have missing values?' }}
-              className="rounded-lg border border-[#e5e5e3] p-4 transition-colors hover:border-[#cfcfcb] hover:bg-[#fafaf8]"
-            >
-              <p className="text-xs font-medium text-[#353532]">Check data completeness</p>
-              <p className="mt-1.5 text-xs leading-5 text-[#858580]">
-                Identify where missing values occur before deeper analysis.
-              </p>
-            </Link>
-          </div>
-        </div>
-
         <div className="mt-6 grid gap-6 lg:grid-cols-[1.55fr_0.85fr]">
           <div className="overflow-hidden rounded-xl border border-[#e5e5e3] bg-white">
             <div className="flex flex-col justify-between gap-3 border-b border-[#ededeb] px-5 py-4 sm:flex-row sm:items-center">

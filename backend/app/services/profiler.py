@@ -1,5 +1,7 @@
 import pandas as pd
 
+from app.services.json_utils import sanitize_for_json
+
 
 def profile_dataset(dataframe: pd.DataFrame) -> dict:
     columns = []
@@ -29,7 +31,7 @@ def profile_dataset(dataframe: pd.DataFrame) -> dict:
 
         columns.append(column_info)
 
-    return {
+    return sanitize_for_json({
         "rows": len(dataframe),
         "columns": len(dataframe.columns),
         "duplicate_rows": int(dataframe.duplicated().sum()),

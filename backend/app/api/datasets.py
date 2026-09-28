@@ -13,6 +13,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.analysis import Analysis
 from app.models.dataset import Dataset
 from app.services.profiler import profile_dataset
+from app.services.json_utils import sanitize_for_json
 from app.services.resource_limits import validate_dataframe_resources
 from app.services.storage import download_dataset_file, upload_dataset_file
 from app.services.supabase import supabase
@@ -143,7 +144,7 @@ async def upload_dataset(
             f"datasets/{current_user['id']}/{dataset_uuid}/original.{extension}"
         )
 
-        profile = profile_dataset(dataframe)
+        profile = sanitize_for_json(profile_dataset(dataframe))
 
         upload_dataset_file(
             file_bytes=contents,
@@ -211,7 +212,7 @@ def get_datasets(
         .all()
     )
 
-    return [
+    return sanitize_for_json([
         {
             "id": dataset.id,
             "name": dataset.name,
@@ -225,7 +226,7 @@ def get_datasets(
             "updated_at": dataset.updated_at,
         }
         for dataset in datasets
-    ]
+    ])
 
 
 @router.get("/{dataset_id}")
@@ -289,12 +290,12 @@ def preview_dataset(
             raise HTTPException(status_code=400, detail="Unsupported dataset type")
 
         validate_dataframe_resources(dataframe)
-        preview = dataframe.head(20).where(pd.notna(dataframe.head(20)), None)
+        preview = dataframe.head(20)
         return {
             "dataset_id": dataset.id,
             "file_name": dataset.file_name,
             "columns": list(dataframe.columns),
-            "rows": preview.to_dict(orient="records"),
+            "rows": sanitize_for_json(preview.to_dict(orient="records")),
             "total_rows": len(dataframe),
         }
     except HTTPException:
@@ -327,7 +328,7 @@ def profile_dataset_endpoint(
         return {
             "dataset_id": dataset.id,
             "file_name": dataset.file_name,
-            "profile": profile_dataset(dataframe),
+            "profile": sanitize_for_json(profile_dataset(dataframe)),
         }
     except HTTPException:
         raise
@@ -354,7 +355,7 @@ def get_dataset_analyses(
         .all()
     )
 
-    return [
+    return sanitize_for_json([
         {
             "analysis_id": analysis.id,
             "dataset_id": analysis.dataset_id,
@@ -370,4 +371,4 @@ def get_dataset_analyses(
             "updated_at": analysis.updated_at,
         }
         for analysis in analyses
-    ]
+    ])

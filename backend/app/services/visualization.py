@@ -182,27 +182,59 @@ def generate_visualization(
         )
 
     # --------------------------------------------------
-    # DIFFERENCE
+    # CHANGE / COMPARISON
     # --------------------------------------------------
 
-    if operation == "difference":
+    if operation in {"difference", "percentage_change"}:
         records = result.get("result", [])
         if not records:
             return None
-        data = []
-        for record in records:
-            label = record.get("category")
-            value = record.get("value")
-            if label is not None and isinstance(value, (int, float)):
-                data.append({"label": str(label), "value": value})
+        data = [
+            {"label": str(record.get("category")), "value": record.get("value")}
+            for record in records
+            if record.get("category") is not None
+            and isinstance(record.get("value"), (int, float))
+        ]
         if not data:
             return None
-        metric_column = result.get("metric_column", "Value")
-        comparison_values = result.get("comparison_values", [])
-        title = f"{metric_column} Comparison"
-        if len(comparison_values) == 2:
-            title = f"{comparison_values[0]} vs {comparison_values[1]}: {metric_column}"
-        return VisualizationSpec(chart_type="bar", title=title, x_axis=result.get("group_column", "Category"), y_axis=metric_column, data=data)
+        metric = result.get("metric_column", "Value")
+        values = result.get("comparison_values", [])
+        title = f"{metric} Comparison"
+        if len(values) == 2:
+            title = f"{values[0]} vs {values[1]}: {metric}"
+        return VisualizationSpec(
+            chart_type="bar",
+            title=title,
+            x_axis=result.get("group_column", "Category"),
+            y_axis=metric,
+            data=data,
+        )
+
+    # --------------------------------------------------
+    # TIME GROUP
+    # --------------------------------------------------
+
+    if operation == "time_group":
+        records = result.get("result", [])
+        if not records:
+            return None
+        data = [
+            {"label": str(record.get("period")), "value": record.get("value")}
+            for record in records
+            if record.get("period") is not None
+            and isinstance(record.get("value"), (int, float))
+        ]
+        if not data:
+            return None
+        period = result.get("period", "period")
+        metric = result.get("metric_column", "Value")
+        return VisualizationSpec(
+            chart_type="line",
+            title=f"{metric} by {period}",
+            x_axis="Period",
+            y_axis=metric,
+            data=data,
+        )
 
     # CORRELATION
     # --------------------------------------------------

@@ -11,6 +11,7 @@ class AnalysisPlan(BaseModel):
         "sort",
         "correlation",
         "compare",
+        "share",
     ]
 
     column: str | None = None
@@ -86,6 +87,14 @@ class AnalysisPlan(BaseModel):
                 raise ValueError(
                     "sort requires 'column'"
                 )
+
+        elif self.operation == "share":
+            if not self.column:
+                raise ValueError("share requires 'column'")
+            if not self.metric_column:
+                raise ValueError("share requires 'metric_column'")
+            if not self.aggregation:
+                raise ValueError("share requires 'aggregation'")
 
         elif self.operation == "compare":
             if not self.column:

@@ -60,7 +60,7 @@ function isAuthenticationError(error: unknown) {
   )
 }
 
-async function requestWithToken<T>(
+async function requestWithToken(
   path: string,
   options: RequestInit,
   accessToken: string,
@@ -114,6 +114,7 @@ function parseApiError(response: Response, body: unknown) {
 
   if (response.status === 401) {
     code = 'AUTHENTICATION_REQUIRED'
+
     if (message === 'Something went wrong.') {
       message = 'Your session has expired. Please sign in again.'
     }
@@ -122,7 +123,7 @@ function parseApiError(response: Response, body: unknown) {
   return new ApiError(message, code, response.status)
 }
 
-export async function apiRequest(
+export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
@@ -143,8 +144,8 @@ export async function apiRequest(
   }
 
   if (result.response.status === 204) {
-    return undefined
+    return undefined as T
   }
 
-  return result.body
+  return result.body as T
 }

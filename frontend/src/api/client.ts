@@ -18,12 +18,27 @@ export class ApiError extends Error {
   }
 }
 
-async function getAccessToken(): Promise<string> {
+async function getAccessToken(forceRefresh = false): Promise<string> {
+  if (forceRefresh) {
+    const { data, error } = await supabase.auth.refreshSession()
+
+    if (error || !data.session?.access_token) {
+      throw new ApiError(
+        'Your session has expired. Please sign in again.',
+        'AUTHENTICATION_REQUIRED',
+        401,
+      )
+    }
+
+    return data.session.access_token
+  }
+
   const {
     data: { session },
+    error,
   } = await supabase.auth.getSession()
 
-  if (!session?.access_token) {
+  if (error || !session?.access_token) {
     throw new ApiError(
       'You must be signed in to perform this action.',
       'AUTHENTICATION_REQUIRED',
@@ -34,14 +49,23 @@ async function getAccessToken(): Promise<string> {
   return session.access_token
 }
 
-export async function apiRequest<T>(
+function isAuthenticationError(error: unknown) {
+  if (!(error instanceof ApiError)) return false
+
+  return (
+    error.status === 401 ||
+    error.code === 'AUTHENTICATION_REQUIRED' ||
+    error.code === 'TOKEN_EXPIRED' ||
+    error.code === 'INVALID_TOKEN'
+  )
+}
+
+async function requestWithToken<T>(
   path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const accessToken = await getAccessToken()
-
+  options: RequestInit,
+  accessToken: string,
+): Promise<{ response: Response; body: unknown }> {
   const headers = new Headers(options.headers)
-
   headers.set('Authorization', `Bearer ${accessToken}`)
 
   if (
@@ -57,27 +81,70 @@ export async function apiRequest<T>(
     headers,
   })
 
-  if (!response.ok) {
-    let message = 'Something went wrong.'
-    let code = 'API_ERROR'
+  let body: unknown = null
 
+  if (response.status !== 204) {
     try {
-      const body = await response.json()
-
-      if (body?.error) {
-        message = body.error.message ?? message
-        code = body.error.code ?? code
-      }
+      body = await response.json()
     } catch {
-      // Keep the default error when the response isn't valid JSON.
+      body = null
     }
-
-    throw new ApiError(message, code, response.status)
   }
 
-  if (response.status === 204) {
+  return { response, body }
+}
+
+function parseApiError(response: Response, body: unknown) {
+  let message = 'Something went wrong.'
+  let code = 'API_ERROR'
+
+  if (body && typeof body === 'object' && 'error' in body) {
+    const errorBody = body.error
+
+    if (errorBody && typeof errorBody === 'object') {
+      if ('message' in errorBody && typeof errorBody.message === 'string') {
+        message = errorBody.message
+      }
+
+      if ('code' in errorBody && typeof errorBody.code === 'string') {
+        code = errorBody.code
+      }
+    }
+  }
+
+  if (response.status === 401) {
+    code = 'AUTHENTICATION_REQUIRED'
+    if (message === 'Something went wrong.') {
+      message = 'Your session has expired. Please sign in again.'
+    }
+  }
+
+  return new ApiError(message, code, response.status)
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  let accessToken = await getAccessToken()
+  let result = await requestWithToken(path, options, accessToken)
+
+  if (!result.response.ok) {
+    const apiError = parseApiError(result.response, result.body)
+
+    if (isAuthenticationError(apiError)) {
+      accessToken = await getAccessToken(true)
+      result = await requestWithToken(path, options, accessToken)
+    }
+  }
+
+  if (!result.response.ok) {
+    throw parseApiError(result.response, result.body)
+  }
+
+  if (result.response.status === 204) {
     return undefined as T
   }
 
-  return response.json() as Promise<T>
+  return result.body as T
 }

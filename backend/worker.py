@@ -182,9 +182,15 @@ def _process_job(analysis_id):
 
             logger.info("Analysis %s completed", analysis_id)
 
-        except Exception:
+        except Exception as error:
             db.rollback()
             logger.exception("Analysis %s failed", analysis_id)
+
+            is_quota_error = (
+                "429" in str(error)
+                or "RESOURCE_EXHAUSTED" in str(error)
+                or "quota" in str(error).lower()
+            )
 
             failed = db.query(Analysis).filter(
                 Analysis.id == analysis_id,
@@ -192,7 +198,13 @@ def _process_job(analysis_id):
             ).first()
 
             if failed is not None:
-                if failed.attempt_count < MAX_JOB_ATTEMPTS:
+                if is_quota_error:
+                    failed.status = "failed"
+                    failed.error = (
+                        "AI analysis quota is currently exhausted. "
+                        "Please try again after the provider quota resets."
+                    )
+                elif failed.attempt_count < MAX_JOB_ATTEMPTS:
                     failed.status = "pending"
                     failed.error = (
                         "Analysis processing failed and will be retried."

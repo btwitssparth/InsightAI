@@ -11,16 +11,39 @@ export function RequireAuth() {
   useEffect(() => {
     let active = true
 
-    void supabase.auth.getSession().then(({ data }) => {
+    async function checkSession() {
+      const { data, error } = await supabase.auth.getSession()
+
       if (!active) return
+
+      if (error) {
+        setAuthenticated(false)
+        setChecking(false)
+        return
+      }
+
       setAuthenticated(Boolean(data.session))
       setChecking(false)
-    })
+    }
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    void checkSession()
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return
-      setAuthenticated(Boolean(session))
-      setChecking(false)
+
+      if (event === 'SIGNED_OUT') {
+        setAuthenticated(false)
+        setChecking(false)
+        return
+      }
+
+      if (session) {
+        setAuthenticated(true)
+        setChecking(false)
+      } else if (event === 'INITIAL_SESSION') {
+        setAuthenticated(false)
+        setChecking(false)
+      }
     })
 
     return () => {

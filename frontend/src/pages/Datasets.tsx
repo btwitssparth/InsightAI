@@ -1,4 +1,5 @@
-import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ChangeEvent, DragEvent } from 'react'
 import {
   AlertCircle,
   CheckCircle2,

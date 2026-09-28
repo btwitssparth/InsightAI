@@ -12,6 +12,7 @@ class AnalysisPlan(BaseModel):
         "correlation",
         "compare",
         "share",
+        "difference",
     ]
 
     column: str | None = None
@@ -105,6 +106,16 @@ class AnalysisPlan(BaseModel):
                 raise ValueError("compare requires 'aggregation'")
             if not self.comparison_values or len(self.comparison_values) != 2:
                 raise ValueError("compare requires exactly two comparison_values")
+
+        elif self.operation == "difference":
+            if not self.column:
+                raise ValueError("difference requires 'column'")
+            if not self.metric_column:
+                raise ValueError("difference requires 'metric_column'")
+            if not self.aggregation:
+                raise ValueError("difference requires 'aggregation'")
+            if not self.comparison_values or len(self.comparison_values) != 2:
+                raise ValueError("difference requires exactly two comparison_values")
 
         elif self.operation == "correlation":
             if not self.columns:

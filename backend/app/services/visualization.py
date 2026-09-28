@@ -182,6 +182,28 @@ def generate_visualization(
         )
 
     # --------------------------------------------------
+    # DIFFERENCE
+    # --------------------------------------------------
+
+    if operation == "difference":
+        records = result.get("result", [])
+        if not records:
+            return None
+        data = []
+        for record in records:
+            label = record.get("category")
+            value = record.get("value")
+            if label is not None and isinstance(value, (int, float)):
+                data.append({"label": str(label), "value": value})
+        if not data:
+            return None
+        metric_column = result.get("metric_column", "Value")
+        comparison_values = result.get("comparison_values", [])
+        title = f"{metric_column} Comparison"
+        if len(comparison_values) == 2:
+            title = f"{comparison_values[0]} vs {comparison_values[1]}: {metric_column}"
+        return VisualizationSpec(chart_type="bar", title=title, x_axis=result.get("group_column", "Category"), y_axis=metric_column, data=data)
+
     # CORRELATION
     # --------------------------------------------------
 

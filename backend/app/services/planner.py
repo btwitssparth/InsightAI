@@ -22,16 +22,18 @@ You MUST return ONLY a JSON OBJECT.
 The JSON object MUST contain exactly these possible fields:
 
 {{
-  "operation": "describe | group_by | filter | sort | correlation | compare | share | difference",
+  "operation": "describe | group_by | top_n | filter | sort | correlation | compare | share | difference | percentage_change | time_group",
   "column": "string or null",
   "metric_column": "string or null",
   "aggregation": "sum | mean | min | max | count | null",
   "operator": "eq | gt | gte | lt | lte | null",
-  "value": "string | number | null",
+  "value": "string | number | [string | number, string | number] | null",
   "comparison_values": ["string | number", "string | number"] or null,
   "descending": true or false,
+  "rank": true or false,
   "limit": "integer or null",
-  "columns": ["string", "..."] or null
+  "columns": ["string", "..."] or null,
+  "period": "day | week | month | quarter | year | null"
 }}
 
 IMPORTANT:
@@ -56,7 +58,7 @@ describe
 Use for general statistical summaries.
 
 group_by
-Use when calculating an aggregate for each category/product/group.
+Use when calculating an aggregate for each category/product/group. Preserve dataset/category order unless the user explicitly asks for highest, lowest, most, least, or ranking; then set rank=true.
 
 filter
 Use when selecting rows based on a condition.

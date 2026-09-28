@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { BarChart3, CheckCircle2, Clock3, Loader2, Sparkles, AlertCircle, ArrowLeft } from 'lucide-react'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts'
 import { getAnalysis, askAnalysis, type Analysis } from '../api/analyses'
 import { getDataset, type Dataset } from '../api/datasets'
 
@@ -84,10 +84,45 @@ function AnalysisChart({ visualization }: { visualization: Record<string, unknow
   const data = Array.isArray(visualization.data) ? visualization.data : []
   if (!data.length) return null
 
+  const chartType = String(visualization.chart_type ?? 'bar')
+  const chartData = data as { label: string; value: number }[]
+  const commonMargin = { top: 10, right: 12, left: 0, bottom: 35 }
+
+  if (chartType === 'pie') {
+    return (
+      <div className="h-[320px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={chartData} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={105} label>
+              {chartData.map((entry, index) => <Cell key={entry.label + index} fill={index % 2 === 0 ? '#292927' : '#8a8a84'} />)}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
+  if (chartType === 'line') {
+    return (
+      <div className="h-[320px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={commonMargin}>
+            <CartesianGrid vertical={false} stroke="#ededeb" />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#777772' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#777772' }} />
+            <Tooltip />
+            <Line type="monotone" dataKey="value" stroke="#292927" strokeWidth={2} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
   return (
     <div className="h-[320px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data as { label: string; value: number }[]} margin={{ top: 10, right: 12, left: 0, bottom: 35 }}>
+        <BarChart data={chartData} margin={commonMargin}>
           <CartesianGrid vertical={false} stroke="#ededeb" />
           <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#777772' }} angle={data.length > 6 ? -35 : 0} textAnchor={data.length > 6 ? 'end' : 'middle'} interval={0} />
           <YAxis tick={{ fontSize: 11, fill: '#777772' }} />

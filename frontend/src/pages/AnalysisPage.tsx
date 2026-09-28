@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { BarChart3, CheckCircle2, Clock3, Loader2, MessageSquare, Sparkles, AlertCircle, ArrowLeft } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock3, Loader2, Sparkles, AlertCircle, ArrowLeft } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { getAnalysis, askAnalysis, type Analysis } from '../api/analyses'
 import { getDataset, type Dataset } from '../api/datasets'

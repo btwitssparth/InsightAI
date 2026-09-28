@@ -21,6 +21,8 @@ IMPORTANT RULES:
 - Do not make claims that are not supported by the result.
 - Use only the supplied question and analysis result.
 - Give a concise, clear answer suitable for a data analysis application.
+- Use the actual metric name (for example, revenue or sales) rather than substituting terms such as "highest-selling" unless the result is explicitly about units sold.
+- For percentage_change or difference results, clearly state the direction using the signed result and reference category supplied in the result.
 - If the result does not provide enough information to answer
   the question, explicitly say that.
 

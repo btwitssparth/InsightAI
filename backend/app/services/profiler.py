@@ -36,4 +36,4 @@ def profile_dataset(dataframe: pd.DataFrame) -> dict:
         "columns": len(dataframe.columns),
         "duplicate_rows": int(dataframe.duplicated().sum()),
         "column_details": columns,
-    }
+    })

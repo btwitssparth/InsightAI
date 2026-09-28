@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-export function RequireAuth({ children }: { children: ReactNode }) {
+export function RequireAuth() {
   const location = useLocation()
   const [checking, setChecking] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
@@ -41,5 +41,5 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
-  return <>{children}</>
+  return <Outlet />
 }

@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { ArrowRight, Check, Eye, EyeOff, Loader2, LockKeyhole, Mail, UserRound } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthLayout } from '../components/auth/AuthLayout'

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { BarChart3, CheckCircle2, Clock3, Loader2, Sparkles, AlertCircle, ArrowLeft } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { getAnalysis, askAnalysis, type Analysis } from '../api/analyses'
@@ -106,11 +106,10 @@ const suggestions = [
 ]
 
 export default function AnalysisPage() {
-  const { analysisId } = useParams()
-  const [searchParams] = useSearchParams()
+  const { analysisId, datasetId: datasetIdParam } = useParams()
   const navigate = useNavigate()
-  const datasetId = Number(searchParams.get('dataset'))
-  const isNew = analysisId === 'new'
+  const isNew = Boolean(datasetIdParam)
+  const datasetId = Number(datasetIdParam ?? 0)
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
@@ -292,7 +291,7 @@ export default function AnalysisPage() {
       {status === 'failed' && (
         <div className="mt-6 rounded-xl border border-[#e6d6d2] bg-[#fffaf8] p-6">
           <div className="flex items-start gap-3"><AlertCircle size={18} className="mt-0.5 text-[#8a5c52]" /><div><h2 className="text-sm font-semibold text-[#6f4d46]">Analysis failed</h2><p className="mt-1 text-xs leading-5 text-[#7c5148]">{analysis?.error ?? 'The analysis could not be completed.'}</p></div></div>
-          <Link to={`/analyses/new?dataset=${analysis?.dataset_id}`} className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-[#171717] px-3.5 text-xs font-medium text-white">Try another question</Link>
+          <Link to={`/datasets/${analysis?.dataset_id}/analyze`} className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-[#171717] px-3.5 text-xs font-medium text-white">Try another question</Link>
         </div>
       )}
 

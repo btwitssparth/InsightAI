@@ -1,9 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { BarChart3, CheckCircle2, Clock3, Loader2, Sparkles, AlertCircle, ArrowLeft } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock3, Loader2, Sparkles, AlertCircle, ArrowLeft, Database, ListChecks } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts'
 import { getAnalysis, askAnalysis, type Analysis } from '../api/analyses'
-import { getDataset, type Dataset } from '../api/datasets'
+import { getDataset, profileDataset, type Dataset, type DatasetProfile } from '../api/datasets'
 
 function formatValue(value: unknown) {
   if (value === null || value === undefined || value === '') return '—'
@@ -134,11 +134,132 @@ function AnalysisChart({ visualization }: { visualization: Record<string, unknow
   )
 }
 
-const suggestions = [
-  'Which categories have the highest total value?',
-  'Show me the top 10 rows by value.',
-  'What is the average of the numeric columns?',
-]
+type ProfileColumn = {
+  name: string
+  data_type: string
+  missing: number
+  unique_values: number
+}
+
+function buildSuggestions(profile: DatasetProfile | null): string[] {
+  const details = profile?.profile?.column_details
+  if (!Array.isArray(details)) {
+    return [
+      'What are the most important patterns in this dataset?',
+      'Summarize the key numeric fields.',
+      'Are there any data quality issues?',
+    ]
+  }
+
+  const columns = details as ProfileColumn[]
+  const numeric = columns.find((column) => /int|float|decimal|complex/i.test(column.data_type))
+  const categorical = columns.find((column) => !/int|float|decimal|complex/i.test(column.data_type))
+
+  const suggestions: string[] = []
+
+  if (categorical && numeric) {
+    suggestions.push(`What is the total ${numeric.name} by ${categorical.name}?`)
+    suggestions.push(`Show the top 10 ${categorical.name} values by ${numeric.name}.`)
+  }
+
+  if (numeric) {
+    suggestions.push(`What is the average ${numeric.name}?`)
+  }
+
+  const missingColumn = columns.find((column) => column.missing > 0)
+  if (missingColumn && suggestions.length < 3) {
+    suggestions.push(`How many missing values are in ${missingColumn.name}?`)
+  }
+
+  if (suggestions.length < 3) {
+    suggestions.push('What are the most important patterns in this dataset?')
+  }
+
+  return suggestions.slice(0, 3)
+}
+
+function AnalysisProgress({ status }: { status: 'pending' | 'processing' }) {
+  const processing = status === 'processing'
+
+  return (
+    <div className="mt-6 rounded-xl border border-[#e5e5e3] bg-white p-6 sm:p-8">
+      <div className="mx-auto max-w-2xl">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f0f0ed] text-[#555550]">
+            {processing ? <Loader2 size={18} className="animate-spin" /> : <Clock3 size={18} />}
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[#999994]">Analysis pipeline</p>
+            <h2 className="mt-1 text-base font-semibold text-[#292927]">
+              {processing ? 'Running your analysis' : 'Analysis queued'}
+            </h2>
+          </div>
+        </div>
+
+        <div className="mt-7 space-y-0">
+          <ProgressStep
+            number="01"
+            title="Request received"
+            description="Your question has been accepted."
+            state="complete"
+          />
+          <ProgressStep
+            number="02"
+            title="Plan and execute"
+            description={processing ? 'The AI planner and verified analysis engine are working on your dataset.' : 'Waiting for the analysis worker to start.'}
+            state={processing ? 'active' : 'upcoming'}
+          />
+          <ProgressStep
+            number="03"
+            title="Prepare verified result"
+            description="The result and explanation will appear here when processing finishes."
+            state="upcoming"
+            last
+          />
+        </div>
+
+        <p className="mt-6 border-t border-[#ededeb] pt-4 text-[11px] leading-5 text-[#999994]">
+          InsightAI calculates results from the uploaded dataset before generating the explanation.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function ProgressStep({
+  number,
+  title,
+  description,
+  state,
+  last = false,
+}: {
+  number: string
+  title: string
+  description: string
+  state: 'complete' | 'active' | 'upcoming'
+  last?: boolean
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex w-8 shrink-0 flex-col items-center">
+        <div className={
+          state === 'complete'
+            ? 'flex h-7 w-7 items-center justify-center rounded-full bg-[#292927] text-white'
+            : state === 'active'
+              ? 'flex h-7 w-7 items-center justify-center rounded-full border border-[#292927] bg-white text-[#292927]'
+              : 'flex h-7 w-7 items-center justify-center rounded-full border border-[#dededb] bg-white text-[#aaa9a4]'
+        }>
+          {state === 'complete' ? <CheckCircle2 size={14} /> : state === 'active' ? <Loader2 size={13} className="animate-spin" /> : <span className="text-[9px] font-semibold">{number}</span>}
+        </div>
+        {!last && <div className={state === 'complete' ? 'my-1 h-9 w-px bg-[#292927]' : 'my-1 h-9 w-px bg-[#e5e5e3]'} />}
+      </div>
+      <div className="pb-5">
+        <p className={state === 'upcoming' ? 'text-sm font-medium text-[#999994]' : 'text-sm font-medium text-[#353532]'}>{title}</p>
+        <p className="mt-1 text-xs leading-5 text-[#858580]">{description}</p>
+      </div>
+    </div>
+  )
+}
 
 export default function AnalysisPage() {
   const { analysisId, datasetId: datasetIdParam } = useParams()
@@ -147,6 +268,7 @@ export default function AnalysisPage() {
   const datasetId = Number(datasetIdParam ?? 0)
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
+  const [profile, setProfile] = useState<DatasetProfile | null>(null)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(!isNew)
@@ -161,8 +283,12 @@ export default function AnalysisPage() {
     }
 
     let cancelled = false
-    void getDataset(datasetId)
-      .then((data) => { if (!cancelled) setDataset(data) })
+    Promise.all([getDataset(datasetId), profileDataset(datasetId)])
+      .then(([data, profileData]) => {
+        if (cancelled) return
+        setDataset(data)
+        setProfile(profileData)
+      })
       .catch((requestError) => {
         if (!cancelled) setError(requestError instanceof Error ? requestError.message : 'Could not load the dataset.')
       })
@@ -227,6 +353,8 @@ export default function AnalysisPage() {
     return analysis.visualization
   }, [analysis?.visualization])
 
+  const suggestions = useMemo(() => buildSuggestions(profile), [profile])
+
   if (!isNew && loading) {
     return (
       <section className="mx-auto max-w-6xl px-5 py-10 md:px-8">
@@ -287,10 +415,22 @@ export default function AnalysisPage() {
             </div>
           </form>
 
-          <div className="mt-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#a0a09b]">Try asking</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {suggestions.map((item) => <button key={item} type="button" onClick={() => setQuestion(item)} className="rounded-full border border-[#dededb] bg-white px-3 py-2 text-xs text-[#666660] hover:border-[#bdbdb8] hover:text-[#292927]">{item}</button>)}
+          <div className="mt-6">
+            <div className="flex items-center gap-2">
+              <ListChecks size={14} className="text-[#777772]" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8f8f8a]">Try a question</p>
+            </div>
+            <div className="mt-2 grid gap-2">
+              {suggestions.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setQuestion(item)}
+                  className="rounded-lg border border-[#e5e5e3] bg-white px-3.5 py-2.5 text-left text-xs text-[#666660] transition-colors hover:border-[#cfcfcb] hover:bg-[#fafaf8] hover:text-[#292927]"
+                >
+                  {item}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -316,11 +456,7 @@ export default function AnalysisPage() {
       {error && <div className="mt-5 rounded-lg border border-[#ead8d4] bg-[#fffaf8] px-4 py-3 text-xs text-[#7c5148]">{error}</div>}
 
       {(status === 'pending' || status === 'processing') && (
-        <div className="mt-6 rounded-xl border border-[#e5e5e3] bg-white px-5 py-12 text-center">
-          <Loader2 className="mx-auto h-6 w-6 animate-spin text-[#555550]" />
-          <h2 className="mt-4 text-sm font-semibold text-[#353532]">{status === 'processing' ? 'Analyzing your data…' : 'Analysis queued…'}</h2>
-          <p className="mx-auto mt-1.5 max-w-md text-xs leading-5 text-[#858580]">The AI planner is creating a structured plan, then the backend will execute it against your actual dataset.</p>
-        </div>
+        <AnalysisProgress status={status} />
       )}
 
       {status === 'failed' && (

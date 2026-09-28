@@ -122,7 +122,7 @@ function parseApiError(response: Response, body: unknown) {
   return new ApiError(message, code, response.status)
 }
 
-export async function apiRequest<T>(
+export async function apiRequest(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
@@ -143,8 +143,8 @@ export async function apiRequest<T>(
   }
 
   if (result.response.status === 204) {
-    return undefined as T
+    return undefined
   }
 
-  return result.body as T
+  return result.body
 }

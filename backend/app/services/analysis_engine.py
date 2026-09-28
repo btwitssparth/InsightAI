@@ -13,6 +13,7 @@ SUPPORTED_OPERATIONS = {
     "correlation",
     "compare",
     "share",
+    "difference",
 }
 
 SUPPORTED_AGGREGATIONS = {
@@ -234,6 +235,29 @@ def validate_plan(
             raise ValueError(f"Column '{metric_column}' must be numeric for aggregation '{aggregation}'")
 
     # --------------------------------------------------
+    # DIFFERENCE
+    # --------------------------------------------------
+
+    elif operation == "difference":
+        group_column = plan.get("column")
+        metric_column = plan.get("metric_column")
+        aggregation = plan.get("aggregation")
+        comparison_values = plan.get("comparison_values")
+        _validate_column(dataframe, group_column, "column")
+        _validate_column(dataframe, metric_column, "metric_column")
+        if aggregation not in SUPPORTED_AGGREGATIONS:
+            raise ValueError(f"Unsupported aggregation: {aggregation}")
+        if aggregation in {"sum", "mean", "min", "max"} and not pd.api.types.is_numeric_dtype(dataframe[metric_column]):
+            raise ValueError(f"Column '{metric_column}' must be numeric for aggregation '{aggregation}'")
+        if not isinstance(comparison_values, list) or len(comparison_values) != 2:
+            raise ValueError("Difference requires exactly two comparison_values")
+        if comparison_values[0] == comparison_values[1]:
+            raise ValueError("Difference values must be different")
+        available = set(dataframe[group_column].dropna().tolist())
+        missing = [value for value in comparison_values if value not in available]
+        if missing:
+            raise ValueError(f"Comparison value(s) not found in '{group_column}': {missing}")
+
     # COMPARE
     # --------------------------------------------------
 
@@ -434,6 +458,38 @@ def execute_plan(
         }
 
     # --------------------------------------------------
+    # DIFFERENCE
+    # --------------------------------------------------
+
+    if operation == "difference":
+        group_column = plan["column"]
+        metric_column = plan["metric_column"]
+        aggregation = plan["aggregation"]
+        comparison_values = plan["comparison_values"]
+        grouped = (dataframe[dataframe[group_column].isin(comparison_values)].groupby(group_column, dropna=False)[metric_column].agg(aggregation))
+        values = {}
+        for category in comparison_values:
+            value = _clean_value(grouped.get(category))
+            if value is None:
+                raise ValueError("Difference calculation produced a missing result")
+            values[str(category)] = value
+        first = float(values[str(comparison_values[0])])
+        second = float(values[str(comparison_values[1])])
+        signed_difference = first - second
+        absolute_difference = abs(signed_difference)
+        percentage_difference = None if second == 0 else (signed_difference / abs(second)) * 100
+        return {
+            "operation": operation,
+            "group_column": group_column,
+            "metric_column": metric_column,
+            "aggregation": aggregation,
+            "comparison_values": comparison_values,
+            "result": [{"category": category, "value": values[str(category)]} for category in comparison_values],
+            "signed_difference": _clean_value(signed_difference),
+            "absolute_difference": _clean_value(absolute_difference),
+            "percentage_difference": _clean_value(percentage_difference),
+        }
+
     # DESCRIBE
     # --------------------------------------------------
 

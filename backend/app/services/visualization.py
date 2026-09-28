@@ -89,6 +89,39 @@ def generate_visualization(
         )
 
     # --------------------------------------------------
+    # SHARE
+    # --------------------------------------------------
+
+    if operation == "share":
+        records = result.get("result", [])
+        if not records:
+            return None
+
+        data = []
+        for record in records:
+            label = record.get("category")
+            share = record.get("percentage_share")
+            if label is None or share is None:
+                continue
+            if not isinstance(share, (int, float)):
+                continue
+            data.append({"label": str(label), "value": share})
+
+        if not data:
+            return None
+
+        group_column = result.get("group_column", "Category")
+        metric_column = result.get("metric_column", "Value")
+
+        return VisualizationSpec(
+            chart_type="pie",
+            title=f"{metric_column} Share by {group_column}",
+            x_axis=group_column,
+            y_axis="Percentage Share",
+            data=data,
+        )
+
+    # --------------------------------------------------
     # SORT
     # --------------------------------------------------
 

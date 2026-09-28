@@ -22,12 +22,13 @@ You MUST return ONLY a JSON OBJECT.
 The JSON object MUST contain exactly these possible fields:
 
 {{
-  "operation": "describe | group_by | filter | sort | correlation",
+  "operation": "describe | group_by | filter | sort | correlation | compare",
   "column": "string or null",
   "metric_column": "string or null",
   "aggregation": "sum | mean | min | max | count | null",
   "operator": "eq | gt | gte | lt | lte | null",
   "value": "string | number | null",
+  "comparison_values": ["string | number", "string | number"] or null,
   "descending": true or false,
   "limit": "integer or null",
   "columns": ["string", "..."] or null
@@ -66,6 +67,9 @@ Use when ordering rows by a column.
 correlation
 Use when examining relationships between numeric columns.
 
+compare
+Use when the user explicitly asks to compare exactly two categories/products/groups on an aggregated numeric metric. Put the category column in "column", the numeric sales/revenue/etc. column in "metric_column", the aggregation in "aggregation", and the two exact category values in "comparison_values".
+
 IMPORTANT EXAMPLES:
 
 Question:
@@ -81,7 +85,8 @@ Correct JSON:
   "limit": 10,
   "operator": null,
   "value": null,
-  "columns": null
+  "columns": null,
+  "comparison_values": null
 }}
 
 Question:

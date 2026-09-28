@@ -11,6 +11,7 @@ from app.models.analysis_schema import AnalysisExecuteRequest, AnalysisQuestionR
 from app.models.dataset import Dataset
 from app.services.analysis_engine import execute_plan
 from app.services.insight_generator import generate_insight
+from app.services.json_utils import sanitize_for_json
 from app.services.planner import generate_analysis_plan
 from app.services.profiler import profile_dataset
 from app.services.resource_limits import validate_dataframe_resources
@@ -56,7 +57,7 @@ def _load_dataframe(dataset: Dataset) -> pd.DataFrame:
 
 
 def _serialize_analysis(analysis: Analysis) -> dict:
-    return {
+    return sanitize_for_json({
         "analysis_id": analysis.id,
         "dataset_id": analysis.dataset_id,
         "question": analysis.question,
@@ -69,7 +70,7 @@ def _serialize_analysis(analysis: Analysis) -> dict:
         "attempt_count": analysis.attempt_count,
         "created_at": analysis.created_at,
         "updated_at": analysis.updated_at,
-    }
+    })
 
 
 @router.get("/")
@@ -84,7 +85,7 @@ def get_analyses(
         .order_by(Analysis.created_at.desc())
         .all()
     )
-    return [_serialize_analysis(analysis) for analysis in analyses]
+    return sanitize_for_json([_serialize_analysis(analysis) for analysis in analyses])
 
 
 @router.get("/{analysis_id}")
@@ -93,9 +94,9 @@ def get_analysis(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return _serialize_analysis(
+    return sanitize_for_json(_serialize_analysis(
         _get_owned_analysis(analysis_id, current_user["id"], db)
-    )
+    ))
 
 
 @router.post("/ask", status_code=status.HTTP_202_ACCEPTED)
@@ -119,7 +120,7 @@ def ask_analysis_question(
     db.commit()
     db.refresh(analysis)
 
-    return _serialize_analysis(analysis)
+    return sanitize_for_json(_serialize_analysis(analysis))
 
 
 @router.post("/execute")

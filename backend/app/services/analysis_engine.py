@@ -11,6 +11,7 @@ SUPPORTED_OPERATIONS = {
     "filter",
     "sort",
     "correlation",
+    "compare",
 }
 
 SUPPORTED_AGGREGATIONS = {
@@ -212,6 +213,78 @@ def validate_plan(
                 raise ValueError(
                     "Sort limit cannot exceed 1000"
                 )
+
+    # --------------------------------------------------
+    # COMPARE
+    # --------------------------------------------------
+
+    elif operation == "compare":
+        group_column = plan.get("column")
+        metric_column = plan.get("metric_column")
+        aggregation = plan.get("aggregation")
+        comparison_values = plan.get("comparison_values")
+
+        _validate_column(dataframe, group_column, "column")
+        _validate_column(dataframe, metric_column, "metric_column")
+
+        if aggregation not in SUPPORTED_AGGREGATIONS:
+            raise ValueError(f"Unsupported aggregation: {aggregation}")
+
+        if aggregation in {"sum", "mean", "min", "max"} and not pd.api.types.is_numeric_dtype(dataframe[metric_column]):
+            raise ValueError(f"Column '{metric_column}' must be numeric for aggregation '{aggregation}'")
+
+        if not isinstance(comparison_values, list) or len(comparison_values) != 2:
+            raise ValueError("Compare requires exactly two comparison_values")
+
+        if comparison_values[0] == comparison_values[1]:
+            raise ValueError("Compare values must be different")
+
+        available = set(dataframe[group_column].dropna().tolist())
+        missing = [value for value in comparison_values if value not in available]
+        if missing:
+            raise ValueError(f"Comparison value(s) not found in '{group_column}': {missing}")
+
+    # --------------------------------------------------
+    # COMPARE
+    # --------------------------------------------------
+
+    if operation == "compare":
+        group_column = plan["column"]
+        metric_column = plan["metric_column"]
+        aggregation = plan["aggregation"]
+        comparison_values = plan["comparison_values"]
+
+        grouped = (
+            dataframe[dataframe[group_column].isin(comparison_values)]
+            .groupby(group_column, dropna=False)[metric_column]
+            .agg(aggregation)
+        )
+
+        values = {
+            str(category): _clean_value(grouped.get(category))
+            for category in comparison_values
+        }
+        numeric_values = list(values.values())
+
+        if any(value is None for value in numeric_values):
+            raise ValueError("Comparison produced a missing result")
+
+        first, second = float(numeric_values[0]), float(numeric_values[1])
+        denominator = (abs(first) + abs(second)) / 2
+        percentage_difference = None if denominator == 0 else abs(first - second) / denominator * 100
+
+        return {
+            "operation": operation,
+            "group_column": group_column,
+            "metric_column": metric_column,
+            "aggregation": aggregation,
+            "comparison_values": comparison_values,
+            "result": [
+                {"category": category, "value": values[str(category)]}
+                for category in comparison_values
+            ],
+            "percentage_difference": _clean_value(percentage_difference),
+        }
 
     # --------------------------------------------------
     # CORRELATION

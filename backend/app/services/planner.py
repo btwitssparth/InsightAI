@@ -144,6 +144,16 @@ Return ONLY the JSON object.
             "Gemini analysis plan must be a JSON object"
         )
 
+    # Gemini may emit explicit nulls for optional boolean fields.
+    # Pydantic defaults only apply when a field is omitted, not when it is null.
+    # Normalize those values before strict workflow validation.
+    for step in plan_data.get("steps", []):
+        if isinstance(step, dict):
+            if step.get("descending") is None:
+                step["descending"] = False
+            if step.get("rank") is None:
+                step["rank"] = False
+
     try:
         return AnalysisWorkflow.model_validate(
             plan_data

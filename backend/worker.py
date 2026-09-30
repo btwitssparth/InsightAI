@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from app.api.analyses import _load_dataframe
 from app.models.analysis import Analysis
 from app.models.dataset import Dataset
-from app.services.analysis_engine import execute_plan
+from app.services.analysis_engine import execute_workflow
 from app.services.insight_generator import generate_insight
 from app.services.planner import generate_analysis_plan
 from app.services.profiler import profile_dataset
@@ -155,9 +155,9 @@ def _process_job(analysis_id):
             )
             _heartbeat(analysis_id)
 
-            result = execute_plan(
+            result = execute_workflow(
                 dataframe=dataframe,
-                plan=plan.model_dump(),
+                workflow=plan.model_dump(),
             )
             _heartbeat(analysis_id)
 

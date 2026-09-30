@@ -186,11 +186,18 @@ def _process_job(analysis_id):
             db.rollback()
             logger.exception("Analysis %s failed", analysis_id)
 
+            error_text = str(error)
+
             is_quota_error = (
-                "429" in str(error)
-                or "RESOURCE_EXHAUSTED" in str(error)
-                or "quota" in str(error).lower()
+                "429" in error_text
+                or "RESOURCE_EXHAUSTED" in error_text
+                or "quota" in error_text.lower()
             )
+
+            # Validation and execution ValueErrors are deterministic.
+            # Retrying them would consume another Gemini request without
+            # changing the underlying input or generated plan.
+            is_deterministic_error = isinstance(error, ValueError)
 
             failed = db.query(Analysis).filter(
                 Analysis.id == analysis_id,
@@ -204,6 +211,9 @@ def _process_job(analysis_id):
                         "AI analysis quota is currently exhausted. "
                         "Please try again after the provider quota resets."
                     )
+                elif is_deterministic_error:
+                    failed.status = "failed"
+                    failed.error = error_text
                 elif failed.attempt_count < MAX_JOB_ATTEMPTS:
                     failed.status = "pending"
                     failed.error = (

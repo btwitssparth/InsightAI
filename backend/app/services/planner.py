@@ -113,12 +113,81 @@ Return ONLY the JSON object.
     prompt = prompt.replace("{dataset_profile}", json.dumps(dataset_profile, indent=2, default=str))
     prompt = prompt.replace("{question}", question)
 
+    # Use a Gemini-compatible JSON schema instead of passing the Pydantic
+    # model directly. Pydantic's Field(gt=0) becomes "exclusiveMinimum"
+    # in its generated schema, which the Gemini API schema transformer
+    # does not accept.
+    gemini_workflow_schema = {
+        "type": "object",
+        "properties": {
+            "steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "input": {"type": "string", "nullable": True},
+                        "operation": {
+                            "type": "string",
+                            "enum": [
+                                "describe",
+                                "group_by",
+                                "top_n",
+                                "filter",
+                                "sort",
+                                "correlation",
+                                "compare",
+                                "share",
+                                "difference",
+                                "percentage_change",
+                                "time_group",
+                            ],
+                        },
+                        "column": {"type": "string", "nullable": True},
+                        "metric_column": {"type": "string", "nullable": True},
+                        "aggregation": {
+                            "type": "string",
+                            "enum": ["sum", "mean", "min", "max", "count"],
+                            "nullable": True,
+                        },
+                        "operator": {
+                            "type": "string",
+                            "enum": ["eq", "gt", "gte", "lt", "lte", "between"],
+                            "nullable": True,
+                        },
+                        "value": {"type": "string", "nullable": True},
+                        "comparison_values": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "nullable": True,
+                        },
+                        "descending": {"type": "boolean"},
+                        "rank": {"type": "boolean"},
+                        "limit": {"type": "integer", "nullable": True},
+                        "columns": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "nullable": True,
+                        },
+                        "period": {
+                            "type": "string",
+                            "enum": ["day", "week", "month", "quarter", "year"],
+                            "nullable": True,
+                        },
+                    },
+                    "required": ["id", "operation"],
+                },
+            },
+        },
+        "required": ["steps"],
+    }
+
     response = client.models.generate_content(
         model=MODEL_NAME,
         contents=prompt,
         config={
             "response_mime_type": "application/json",
-            "response_schema": AnalysisWorkflow,
+            "response_schema": gemini_workflow_schema,
         },
     )
 

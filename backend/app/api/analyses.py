@@ -9,7 +9,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.analysis import Analysis
 from app.models.analysis_schema import AnalysisExecuteRequest, AnalysisQuestionRequest
 from app.models.dataset import Dataset
-from app.services.analysis_engine import execute_plan
+from app.services.analysis_engine import execute_plan, execute_workflow
 from app.services.insight_generator import generate_insight
 from app.services.json_utils import sanitize_for_json
 from app.services.planner import generate_analysis_plan

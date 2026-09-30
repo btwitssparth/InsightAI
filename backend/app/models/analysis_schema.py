@@ -165,7 +165,7 @@ class AnalysisWorkflow(BaseModel):
 
 class AnalysisExecuteRequest(BaseModel):
     dataset_id: int = Field(gt=0)
-    plan: AnalysisPlan
+    plan: AnalysisPlan | AnalysisWorkflow
     question: str = Field(min_length=1, max_length=2000)
 
 

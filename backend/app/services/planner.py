@@ -21,6 +21,9 @@ Return ONLY a JSON object with a "steps" array. Each step must contain:
 - input: null to use the original dataset, otherwise an earlier step id
 - operation: describe | group_by | top_n | filter | sort | correlation | compare | share | difference | percentage_change | time_group
 - the same operation fields used by the existing AnalysisPlan
+- columns MUST be a JSON array of strings, or null. Never use a single string for columns.
+- comparison_values MUST be a JSON array of exactly two values when required, or null.
+- descending and rank MUST always be JSON booleans, never null or strings.
 
 Rules:
 1. Use only columns present in DATASET PROFILE.
@@ -113,6 +116,10 @@ Return ONLY the JSON object.
     response = client.models.generate_content(
         model=MODEL_NAME,
         contents=prompt,
+        config={
+            "response_mime_type": "application/json",
+            "response_schema": AnalysisWorkflow,
+        },
     )
 
     if not response.text:
@@ -156,6 +163,8 @@ Return ONLY the JSON object.
                 step["descending"] = False
             if step.get("rank") is None:
                 step["rank"] = False
+            if isinstance(step.get("columns"), str):
+                step["columns"] = [step["columns"]]
 
     try:
         return AnalysisWorkflow.model_validate(

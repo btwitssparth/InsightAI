@@ -31,8 +31,7 @@ Rules:
 6. Use null input for independent calculations that must use the original dataset. This allows branches for questions requiring multiple independent facts.
 7. When a later step needs a value produced by an earlier step, use:
    "$STEP_ID[INDEX].COLUMN_NAME"
-7. For top/bottom questions use top_n with rank=true and limit.
-8. For ranking followed by comparison, first group_by, then top_n, then difference/percentage_change using dynamic references.
+8. For top/bottom questions use top_n with rank=true and limit.
 9. For ranking followed by comparison, first group_by, then top_n, then difference/percentage_change using dynamic references.
 10. If the question asks for multiple independent facts, create the required branches and make sure the workflow contains a step for each requested fact.
 11. The final step may be any result, but all step results will be available to the insight generator.

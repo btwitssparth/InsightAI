@@ -1,4 +1,5 @@
 import math
+import re
 
 import pandas as pd
 
@@ -354,3 +355,125 @@ def execute_plan(dataframe: pd.DataFrame, plan: dict):
         }
 
     raise ValueError(f"Operation '{operation}' is not implemented")
+
+
+_REFERENCE_PATTERN = re.compile(r"^\$([A-Za-z0-9_-]+)\[(\d+)\]\.([^\.]+)$")
+
+
+def _resolve_reference(value, step_results: dict):
+    if not isinstance(value, str):
+        return value
+
+    match = _REFERENCE_PATTERN.match(value)
+    if not match:
+        return value
+
+    step_id, index_text, column = match.groups()
+    previous = step_results.get(step_id)
+
+    if previous is None:
+        raise ValueError(f"Reference step '{step_id}' has not produced a result")
+
+    records = previous.get("result")
+    if not isinstance(records, list):
+        raise ValueError(f"Reference step '{step_id}' does not contain tabular rows")
+
+    index = int(index_text)
+    if index >= len(records):
+        raise ValueError(f"Reference '{value}' is outside the available result rows")
+
+    record = records[index]
+    if not isinstance(record, dict) or column not in record:
+        raise ValueError(
+            f"Reference column '{column}' was not found in step '{step_id}'"
+        )
+
+    return record[column]
+
+
+def _resolve_plan_references(plan: dict, step_results: dict):
+    resolved = dict(plan)
+
+    if isinstance(resolved.get("comparison_values"), list):
+        resolved["comparison_values"] = [
+            _resolve_reference(value, step_results)
+            for value in resolved["comparison_values"]
+        ]
+
+    return resolved
+
+
+def _result_dataframe(result: dict) -> pd.DataFrame:
+    records = result.get("result")
+
+    if not isinstance(records, list):
+        raise ValueError(
+            "This step cannot be used as input because it did not produce tabular rows"
+        )
+
+    if not records:
+        raise ValueError("This step produced no rows for the next step")
+
+    return pd.DataFrame(records)
+
+
+def execute_workflow(dataframe: pd.DataFrame, workflow: dict):
+    steps = workflow.get("steps")
+
+    if not isinstance(steps, list) or not steps:
+        raise ValueError("Workflow requires at least one step")
+
+    if len(steps) > 10:
+        raise ValueError("Workflow cannot contain more than 10 steps")
+
+    step_results = {}
+
+    for index, raw_step in enumerate(steps):
+        step = dict(raw_step)
+        step_id = step.get("id")
+        input_id = step.get("input")
+
+        if not step_id:
+            raise ValueError("Every workflow step requires an id")
+
+        if input_id is None:
+            if index > 0:
+                raise ValueError(
+                    f"Step '{step_id}' must reference an earlier step"
+                )
+            step_dataframe = dataframe
+        else:
+            if input_id not in step_results:
+                raise ValueError(
+                    f"Step '{step_id}' references unavailable step '{input_id}'"
+                )
+            step_dataframe = _result_dataframe(step_results[input_id])
+
+        plan = {
+            key: value
+            for key, value in step.items()
+            if key not in {"id", "input"}
+        }
+        plan = _resolve_plan_references(plan, step_results)
+
+        result = execute_plan(
+            dataframe=step_dataframe,
+            plan=plan,
+        )
+        step_results[step_id] = result
+
+    final_step_id = steps[-1]["id"]
+
+    return {
+        "workflow": {
+            "step_count": len(steps),
+            "steps": [
+                {
+                    "id": step["id"],
+                    "operation": step["operation"],
+                }
+                for step in steps
+            ],
+        },
+        "final": step_results[final_step_id],
+    }

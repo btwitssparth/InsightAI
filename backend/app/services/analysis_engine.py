@@ -463,17 +463,16 @@ def execute_workflow(dataframe: pd.DataFrame, workflow: dict):
         step_results[step_id] = result
 
     final_step_id = steps[-1]["id"]
-
-    return {
-        "workflow": {
-            "step_count": len(steps),
-            "steps": [
-                {
-                    "id": step["id"],
-                    "operation": step["operation"],
-                }
-                for step in steps
-            ],
-        },
-        "final": step_results[final_step_id],
+    final_result = dict(step_results[final_step_id])
+    final_result["workflow"] = {
+        "step_count": len(steps),
+        "steps": [
+            {
+                "id": step["id"],
+                "operation": step["operation"],
+            }
+            for step in steps
+        ],
     }
+
+    return final_result

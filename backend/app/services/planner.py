@@ -11,7 +11,7 @@ def generate_analysis_plan(
     dataset_profile: dict,
 ) -> AnalysisWorkflow:
 
-    prompt = f"""
+    prompt = """
 You are the analysis planning component of InsightAI.
 
 Convert the user's natural-language question into a structured multi-step analysis workflow.
@@ -30,14 +30,14 @@ Rules:
 5. Later steps operate on the tabular result produced by their input step.
 6. When a later step needs a value produced by an earlier step, use:
    "$STEP_ID[INDEX].COLUMN_NAME"
-   Example: "$top_two[0].Product"
 7. For top/bottom questions use top_n with rank=true and limit.
 8. For ranking followed by comparison, first group_by, then top_n, then difference/percentage_change using dynamic references.
 9. Return only JSON. No markdown or explanation.
 
-Example for:
-"Which product generated the most revenue and how much higher was it than the second-highest?"
+EXAMPLE:
+Question: "Which product generated the most revenue and how much higher was it than the second-highest?"
 
+EXAMPLE WORKFLOW:
 {
   "steps": [
     {
@@ -96,9 +96,7 @@ Example for:
 
 DATASET PROFILE:
 
-
-
-{json.dumps(dataset_profile, indent=2, default=str)}
+{dataset_profile}
 
 USER QUESTION:
 
@@ -106,6 +104,8 @@ USER QUESTION:
 
 Return ONLY the JSON object.
 """
+    prompt = prompt.replace("{dataset_profile}", json.dumps(dataset_profile, indent=2, default=str))
+    prompt = prompt.replace("{question}", question)
 
     response = client.models.generate_content(
         model=MODEL_NAME,

@@ -469,10 +469,12 @@ def execute_workflow(dataframe: pd.DataFrame, workflow: dict):
         "steps": [
             {
                 "id": step["id"],
+                "input": step.get("input"),
                 "operation": step["operation"],
             }
             for step in steps
         ],
+        "step_results": step_results,
     }
 
     return final_result

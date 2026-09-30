@@ -18,7 +18,7 @@ Convert the user's natural-language question into a structured multi-step analys
 
 Return ONLY a JSON object with a "steps" array. Each step must contain:
 - id: unique string
-- input: null for the first step, otherwise an earlier step id
+- input: null to use the original dataset, otherwise an earlier step id
 - operation: describe | group_by | top_n | filter | sort | correlation | compare | share | difference | percentage_change | time_group
 - the same operation fields used by the existing AnalysisPlan
 
@@ -27,12 +27,16 @@ Rules:
 2. Use one step for simple questions and multiple dependent steps for complex questions.
 3. Maximum 10 steps.
 4. Never calculate results yourself.
-5. Later steps operate on the tabular result produced by their input step.
-6. When a later step needs a value produced by an earlier step, use:
+5. A step with input=null reads the original dataset. A step with input=<step id> reads that step's tabular result.
+6. Use null input for independent calculations that must use the original dataset. This allows branches for questions requiring multiple independent facts.
+7. When a later step needs a value produced by an earlier step, use:
    "$STEP_ID[INDEX].COLUMN_NAME"
 7. For top/bottom questions use top_n with rank=true and limit.
 8. For ranking followed by comparison, first group_by, then top_n, then difference/percentage_change using dynamic references.
-9. Return only JSON. No markdown or explanation.
+9. For ranking followed by comparison, first group_by, then top_n, then difference/percentage_change using dynamic references.
+10. If the question asks for multiple independent facts, create the required branches and make sure the workflow contains a step for each requested fact.
+11. The final step may be any result, but all step results will be available to the insight generator.
+12. Return only JSON. No markdown or explanation.
 
 EXAMPLE:
 Question: "Which product generated the most revenue and how much higher was it than the second-highest?"

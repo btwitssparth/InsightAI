@@ -134,8 +134,22 @@ def execute_analysis(
     try:
         dataframe = _load_dataframe(dataset)
         plan = request.plan.model_dump()
-        result = execute_plan(dataframe=dataframe, plan=plan)
-        insight = generate_insight(question=request.question, result=result)
+
+        if "steps" in plan:
+            result = execute_workflow(
+                dataframe=dataframe,
+                workflow=plan,
+            )
+        else:
+            result = execute_plan(
+                dataframe=dataframe,
+                plan=plan,
+            )
+
+        insight = generate_insight(
+            question=request.question,
+            result=result,
+        )
         visualization = generate_visualization(result=result)
 
         now = datetime.now(timezone.utc)

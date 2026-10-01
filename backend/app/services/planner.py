@@ -120,60 +120,14 @@ Return ONLY the JSON object.
     prompt = prompt.replace("{dataset_profile}", json.dumps(dataset_profile, indent=2, default=str))
     prompt = prompt.replace("{question}", question)
 
-    # Keep Gemini output constrained to JSON, but intentionally avoid a
-    # large nested response schema here. Gemini's serving layer can reject
-    # complex anyOf/operation-union schemas with "too many states" before
-    # generation starts. Pydantic performs the authoritative semantic
-    # validation immediately after the JSON is returned.
-    response_schema = {
-        "type": "object",
-        "properties": {
-            "steps": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "input": {"type": "string", "nullable": True},
-                        "operation": {"type": "string"},
-                        "column": {"type": "string", "nullable": True},
-                        "metric_column": {"type": "string", "nullable": True},
-                        "aggregation": {"type": "string", "nullable": True},
-                        "operator": {"type": "string", "nullable": True},
-                        "value": {"type": "string", "nullable": True},
-                        "comparison_values": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "nullable": True,
-                        },
-                        "descending": {"type": "boolean"},
-                        "rank": {"type": "boolean"},
-                        "limit": {"type": "integer", "nullable": True},
-                        "columns": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "nullable": True,
-                        },
-                        "period": {"type": "string", "nullable": True},
-                    },
-                    "required": [
-                        "id", "input", "operation", "column", "metric_column",
-                        "aggregation", "operator", "value", "comparison_values",
-                        "descending", "rank", "limit", "columns", "period",
-                    ],
-                },
-            },
-        },
-        "required": ["steps"],
-    }
+    # Use lightweight JSON mode. Complex nested schemas can be rejected by Gemini's serving layer with a "too many states" error. Pydantic remains the authoritative validator after Gemini returns the JSON.
 
     response = client.models.generate_content(
         model=MODEL_NAME,
         contents=prompt,
         config={
             "response_mime_type": "application/json",
-            "response_schema": response_schema,
-        },
+                    },
     )
 
     if not response.text:

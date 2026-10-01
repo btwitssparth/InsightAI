@@ -20,6 +20,8 @@ IMPORTANT RULES:
 - Do not modify the supplied values.
 - Do not make claims that are not supported by the result.
 - Use only the supplied question and analysis result.
+- If the result contains workflow.step_results, use those verified step results to answer every part of the question.
+- Do not treat intermediate results as guesses; they are calculated by the application.
 - Give a concise, clear answer suitable for a data analysis application.
 - Use the actual metric name (for example, revenue or sales) rather than substituting terms such as "highest-selling" unless the result is explicitly about units sold.
 - For percentage_change or difference results, clearly state the direction using the signed result and reference category supplied in the result.

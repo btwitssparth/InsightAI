@@ -9,8 +9,9 @@ from app.dependencies import get_current_user, get_db
 from app.models.analysis import Analysis
 from app.models.analysis_schema import AnalysisExecuteRequest, AnalysisQuestionRequest
 from app.models.dataset import Dataset
-from app.services.analysis_engine import execute_plan
+from app.services.analysis_engine import execute_plan, execute_workflow
 from app.services.insight_generator import generate_insight
+from app.services.followups import generate_follow_up_questions
 from app.services.json_utils import sanitize_for_json
 from app.services.planner import generate_analysis_plan
 from app.services.profiler import profile_dataset
@@ -66,6 +67,11 @@ def _serialize_analysis(analysis: Analysis) -> dict:
         "result": analysis.result,
         "insight": analysis.insight,
         "visualization": analysis.visualization,
+        "follow_up_questions": generate_follow_up_questions(
+            question=analysis.question,
+            plan=analysis.plan,
+            result=analysis.result,
+        ) if analysis.status == "completed" else [],
         "error": analysis.error,
         "attempt_count": analysis.attempt_count,
         "created_at": analysis.created_at,
@@ -134,8 +140,22 @@ def execute_analysis(
     try:
         dataframe = _load_dataframe(dataset)
         plan = request.plan.model_dump()
-        result = execute_plan(dataframe=dataframe, plan=plan)
-        insight = generate_insight(question=request.question, result=result)
+
+        if "steps" in plan:
+            result = execute_workflow(
+                dataframe=dataframe,
+                workflow=plan,
+            )
+        else:
+            result = execute_plan(
+                dataframe=dataframe,
+                plan=plan,
+            )
+
+        insight = generate_insight(
+            question=request.question,
+            result=result,
+        )
         visualization = generate_visualization(result=result)
 
         now = datetime.now(timezone.utc)

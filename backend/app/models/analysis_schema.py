@@ -102,7 +102,9 @@ class AnalysisPlan(BaseModel):
             if not self.aggregation:
                 raise ValueError(f"{self.operation} requires 'aggregation'")
             if not self.comparison_values or len(self.comparison_values) != 2:
-                raise ValueError(f"{self.operation} requires exactly two comparison_values")
+                raise ValueError(
+                    f"{self.operation} requires exactly two comparison_values"
+                )
 
         elif self.operation == "correlation":
             if not self.columns or len(self.columns) < 2:
@@ -121,9 +123,49 @@ class AnalysisPlan(BaseModel):
         return self
 
 
+class AnalysisStep(AnalysisPlan):
+    id: str = Field(min_length=1, max_length=64)
+    input: str | None = None
+
+
+class AnalysisWorkflow(BaseModel):
+    steps: list[AnalysisStep] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_workflow(self):
+        step_ids = [step.id for step in self.steps]
+
+        if len(step_ids) != len(set(step_ids)):
+            raise ValueError("Workflow step IDs must be unique")
+
+        known_ids = set(step_ids)
+
+        for index, step in enumerate(self.steps):
+            if step.input is None:
+                continue
+
+            if step.input not in known_ids:
+                raise ValueError(
+                    f"Step '{step.id}' references unknown input '{step.input}'"
+                )
+
+            if step.input == step.id:
+                raise ValueError(
+                    f"Step '{step.id}' cannot reference itself"
+                )
+
+            input_index = step_ids.index(step.input)
+            if input_index >= index:
+                raise ValueError(
+                    f"Step '{step.id}' must reference an earlier step"
+                )
+
+        return self
+
+
 class AnalysisExecuteRequest(BaseModel):
     dataset_id: int = Field(gt=0)
-    plan: AnalysisPlan
+    plan: AnalysisPlan | AnalysisWorkflow
     question: str = Field(min_length=1, max_length=2000)
 
 

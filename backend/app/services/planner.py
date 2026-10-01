@@ -2,177 +2,114 @@ import json
 
 from pydantic import ValidationError
 
-from app.models.analysis_schema import AnalysisPlan
+from app.models.analysis_schema import AnalysisWorkflow
 from app.services.ai import client, MODEL_NAME
 
 
 def generate_analysis_plan(
     question: str,
     dataset_profile: dict,
-) -> AnalysisPlan:
+) -> AnalysisWorkflow:
 
-    prompt = f"""
+    prompt = """
 You are the analysis planning component of InsightAI.
 
-Convert the user's natural-language question into ONE
-structured analysis plan.
+Convert the user's natural-language question into a structured multi-step analysis workflow.
 
-You MUST return ONLY a JSON OBJECT.
+Return ONLY a JSON object with a "steps" array. Each step must contain:
+- id: unique string
+- input: null to use the original dataset, otherwise an earlier step id
+- operation: describe | group_by | top_n | filter | sort | correlation | compare | share | difference | percentage_change | time_group
+- the same operation fields used by the existing AnalysisPlan
+- columns MUST be a JSON array of strings, or null. Never use a single string for columns.
+- comparison_values MUST be a JSON array of exactly two values when required, or null.
+- descending and rank MUST always be JSON booleans, never null or strings.
 
-The JSON object MUST contain exactly these possible fields:
+Rules:
+1. Use only columns present in DATASET PROFILE.
+2. Use one step for simple questions and multiple dependent steps for complex questions.
+3. Maximum 10 steps.
+4. Never calculate results yourself.
+5. A step with input=null reads the original dataset. A step with input=<step id> reads that step's tabular result.
+6. Use null input for independent calculations that must use the original dataset. This allows branches for questions requiring multiple independent facts.
+7. When a later step needs a value produced by an earlier step, use:
+   "$STEP_ID[INDEX].COLUMN_NAME"
+8. For top/bottom questions use top_n with rank=true and limit.
+9. For ranking followed by comparison, first group_by, then top_n, then difference/percentage_change using dynamic references.
+10. If the question asks for multiple independent facts, create the required branches and make sure the workflow contains a step for each requested fact.
+11. If the question asks for percentage share, contribution, proportion, or percentage of a total, you MUST create a share step. The share step MUST include column, metric_column, and aggregation.
+12. A share step should normally read the original dataset with input=null so the denominator is the full dataset total. Do not calculate share from a top_n result because that would change the denominator.
+13. If the requested share is for a ranked item such as the highest-revenue product, create the share calculation as an independent branch on the original dataset and also create the ranking branch needed to identify that item. All verified step results are available to the insight generator, which can match the ranked item to its share.
+14. For difference or percentage_change, the step MUST include column, metric_column, aggregation, and exactly two comparison_values. Use dynamic references when the compared categories were identified by an earlier ranking step.
+15. For group_by and top_n, ALWAYS include column, metric_column, and aggregation. top_n MUST also include limit.
+16. Do not create separate group_by steps for each named category/value. If the question names specific categories, use the actual category column and filter those values when needed; one group_by can aggregate multiple categories.
+17. Before returning the workflow, check every distinct fact requested by the user and ensure at least one step produces the verified data needed to answer it. Do not omit a requested fact just because another branch answers part of the question.
+17. The final step may be any result, but all step results will be available to the insight generator.
+18. Return only JSON. No markdown or explanation.
 
-{{
-  "operation": "describe | group_by | top_n | filter | sort | correlation | compare | share | difference | percentage_change | time_group",
-  "column": "string or null",
-  "metric_column": "string or null",
-  "aggregation": "sum | mean | min | max | count | null",
-  "operator": "eq | gt | gte | lt | lte | between | null",
-  "value": "string | number | [string | number, string | number] | null",
-  "comparison_values": ["string | number", "string | number"] or null,
-  "descending": true or false,
-  "rank": true or false,
-  "limit": "integer or null",
-  "columns": ["string", "..."] or null,
-  "period": "day | week | month | quarter | year | null"
-}}
+EXAMPLE:
+Question: "Which product generated the most revenue and how much higher was it than the second-highest?"
 
-IMPORTANT:
-
-1. Never invent column names.
-2. Use ONLY column names present in DATASET PROFILE.
-3. Do not nest objects inside column, metric_column, aggregation,
-   operator, value, descending, rank, or limit.
-4. "column" MUST always be a plain string or null.
-5. "metric_column" MUST always be a plain string or null.
-6. "aggregation" MUST always be a plain string or null.
-7. "descending" MUST always be a boolean.
-8. "limit" MUST always be an integer or null.
-9. "columns" MUST be an array of plain strings or null.
-10. Do not calculate results.
-11. Do not answer the user's question.
-12. Return only the JSON object. No markdown. No explanation.
-
-SUPPORTED OPERATIONS:
-
-describe
-Use for general statistical summaries.
-
-group_by
-Use when calculating an aggregate for each category/product/group. Preserve dataset/category order unless the user explicitly asks for highest, lowest, most, least, or ranking; then set rank=true.
-
-filter
-Use when selecting rows based on a condition.
-
-sort
-Use when ordering rows by a column.
-
-correlation
-Use when examining relationships between numeric columns.
-
-compare
-Use when the user explicitly asks to compare exactly two categories/products/groups on an aggregated numeric metric. Put the category column in "column", the numeric sales/revenue/etc. column in "metric_column", the aggregation in "aggregation", and the two exact category values in "comparison_values".
-
-share
-Use when the user asks for a category/product/group's percentage share of a total, including questions such as "what percentage of total revenue is Laptop?" or "compare products and give their percentage share". Put the category column in "column", the numeric metric in "metric_column", and the aggregation in "aggregation". The engine will calculate the total and percentage shares; never calculate percentages yourself.
-
-difference
-Use when the user asks how much higher, lower, greater, or smaller one category/product/group is than another, including absolute or percentage differences. Use exactly two comparison_values. Preserve the order of the two categories from the question. Never calculate the difference yourself.
-
-top_n
-Use for the top/bottom N categories by an aggregate. Set rank=true, set limit to N, and use descending=true for top/highest or false for bottom/lowest.
-
-percentage_change
-Use when the user asks how much a value changed between exactly two categories or periods. Preserve the order stated by the user. The engine calculates the percentage.
-
-time_group
-Use for daily, weekly, monthly, quarterly, or yearly aggregation over a date/datetime column. Put the date column in column, the metric in metric_column, and the period in period.
-
-IMPORTANT EXAMPLES:
-
-Question:
-"Which products generated the most revenue?"
-
-Correct JSON:
-{{
-  "operation": "group_by",
-  "column": "Product",
-  "metric_column": "Revenue",
-  "aggregation": "sum",
-  "descending": true,
-  "limit": 10,
-  "operator": null,
-  "value": null,
-  "columns": null,
-  "comparison_values": null
-}}
-
-Question:
-"What is the average revenue for each product?"
-
-Correct JSON:
-{{
-  "operation": "group_by",
-  "column": "Product",
-  "metric_column": "Revenue",
-  "aggregation": "mean",
-  "descending": false,
-  "limit": null,
-  "operator": null,
-  "value": null,
-  "columns": null
-}}
-
-Question:
-"Show me transactions where revenue is greater than 50000."
-
-Correct JSON:
-{{
-  "operation": "filter",
-  "column": "Revenue",
-  "metric_column": null,
-  "aggregation": null,
-  "operator": "gt",
-  "value": 50000,
-  "descending": false,
-  "limit": null,
-  "columns": null
-}}
-
-Question:
-"Show the highest revenue transactions."
-
-Correct JSON:
-{{
-  "operation": "sort",
-  "column": "Revenue",
-  "metric_column": null,
-  "aggregation": null,
-  "operator": null,
-  "value": null,
-  "descending": true,
-  "limit": 10,
-  "columns": null
-}}
-
-Question:
-"What is the correlation between revenue and quantity?"
-
-Correct JSON:
-{{
-  "operation": "correlation",
-  "column": null,
-  "metric_column": null,
-  "aggregation": null,
-  "operator": null,
-  "value": null,
-  "descending": false,
-  "limit": null,
-  "columns": ["Revenue", "Quantity"]
-}}
+EXAMPLE WORKFLOW:
+{
+  "steps": [
+    {
+      "id": "revenue_by_product",
+      "input": null,
+      "operation": "group_by",
+      "column": "Product",
+      "metric_column": "Revenue",
+      "aggregation": "sum",
+      "descending": true,
+      "rank": true,
+      "limit": 10,
+      "operator": null,
+      "value": null,
+      "comparison_values": null,
+      "columns": null,
+      "period": null
+    },
+    {
+      "id": "top_two",
+      "input": "revenue_by_product",
+      "operation": "top_n",
+      "column": "Product",
+      "metric_column": "Revenue",
+      "aggregation": "sum",
+      "descending": true,
+      "rank": true,
+      "limit": 2,
+      "operator": null,
+      "value": null,
+      "comparison_values": null,
+      "columns": null,
+      "period": null
+    },
+    {
+      "id": "difference_top_two",
+      "input": "top_two",
+      "operation": "difference",
+      "column": "Product",
+      "metric_column": "Revenue",
+      "aggregation": "sum",
+      "comparison_values": [
+        "$top_two[0].Product",
+        "$top_two[1].Product"
+      ],
+      "descending": false,
+      "rank": false,
+      "limit": null,
+      "operator": null,
+      "value": null,
+      "columns": null,
+      "period": null
+    }
+  ]
+}
 
 DATASET PROFILE:
 
-{json.dumps(dataset_profile, indent=2, default=str)}
+{dataset_profile}
 
 USER QUESTION:
 
@@ -180,10 +117,17 @@ USER QUESTION:
 
 Return ONLY the JSON object.
 """
+    prompt = prompt.replace("{dataset_profile}", json.dumps(dataset_profile, indent=2, default=str))
+    prompt = prompt.replace("{question}", question)
+
+    # Use lightweight JSON mode. Complex nested schemas can be rejected by Gemini's serving layer with a "too many states" error. Pydantic remains the authoritative validator after Gemini returns the JSON.
 
     response = client.models.generate_content(
         model=MODEL_NAME,
         contents=prompt,
+        config={
+            "response_mime_type": "application/json",
+                    },
     )
 
     if not response.text:
@@ -218,8 +162,63 @@ Return ONLY the JSON object.
             "Gemini analysis plan must be a JSON object"
         )
 
+    # Gemini structured output can omit operation-specific fields even though
+    # the operation itself is valid. Normalize common missing fields before
+    # Pydantic's operation validators run.
+    operation_defaults = {
+        "group_by": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+        },
+        "top_n": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+            "limit": None,
+        },
+        "share": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+        },
+        "difference": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+            "comparison_values": None,
+        },
+        "percentage_change": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+            "comparison_values": None,
+        },
+    }
+
+    # Do not invent values here. Missing required fields must still fail
+    # validation; this normalization only makes the generated structure
+    # explicit and keeps the error deterministic.
+    for step in plan_data.get("steps", []):
+        if isinstance(step, dict):
+            operation = step.get("operation")
+            for field, default in operation_defaults.get(operation, {}).items():
+                step.setdefault(field, default)
+
+    # Gemini may emit explicit nulls for optional boolean fields.
+    # Pydantic defaults only apply when a field is omitted, not when it is null.
+    # Normalize those values before strict workflow validation.
+    for step in plan_data.get("steps", []):
+        if isinstance(step, dict):
+            if step.get("descending") is None:
+                step["descending"] = False
+            if step.get("rank") is None:
+                step["rank"] = False
+            if isinstance(step.get("columns"), str):
+                step["columns"] = [step["columns"]]
+
     try:
-        return AnalysisPlan.model_validate(
+        return AnalysisWorkflow.model_validate(
             plan_data
         )
 

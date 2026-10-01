@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from app.api.analyses import _load_dataframe
 from app.models.analysis import Analysis
 from app.models.dataset import Dataset
-from app.services.analysis_engine import execute_plan
+from app.services.analysis_engine import execute_workflow
 from app.services.insight_generator import generate_insight
 from app.services.planner import generate_analysis_plan
 from app.services.profiler import profile_dataset
@@ -155,9 +155,9 @@ def _process_job(analysis_id):
             )
             _heartbeat(analysis_id)
 
-            result = execute_plan(
+            result = execute_workflow(
                 dataframe=dataframe,
-                plan=plan.model_dump(),
+                workflow=plan.model_dump(),
             )
             _heartbeat(analysis_id)
 
@@ -186,11 +186,26 @@ def _process_job(analysis_id):
             db.rollback()
             logger.exception("Analysis %s failed", analysis_id)
 
+            error_text = str(error)
+
             is_quota_error = (
-                "429" in str(error)
-                or "RESOURCE_EXHAUSTED" in str(error)
-                or "quota" in str(error).lower()
+                "429" in error_text
+                or "RESOURCE_EXHAUSTED" in error_text
+                or "quota" in error_text.lower()
             )
+
+            # Gemini 400 INVALID_ARGUMENT errors are request/schema errors.
+            # Retrying the same request cannot fix them and would waste
+            # another worker attempt (and potentially another provider call).
+            is_invalid_request_error = (
+                "400 INVALID_ARGUMENT" in error_text
+                or "INVALID_ARGUMENT" in error_text
+            )
+
+            # Validation and execution ValueErrors are deterministic.
+            # Retrying them would consume another Gemini request without
+            # changing the underlying input or generated plan.
+            is_deterministic_error = isinstance(error, ValueError)
 
             failed = db.query(Analysis).filter(
                 Analysis.id == analysis_id,
@@ -204,6 +219,15 @@ def _process_job(analysis_id):
                         "AI analysis quota is currently exhausted. "
                         "Please try again after the provider quota resets."
                     )
+                elif is_invalid_request_error:
+                    failed.status = "failed"
+                    failed.error = (
+                        "The AI analysis request was rejected by the provider. "
+                        "Please try again after the analysis planner is updated."
+                    )
+                elif is_deterministic_error:
+                    failed.status = "failed"
+                    failed.error = error_text
                 elif failed.attempt_count < MAX_JOB_ATTEMPTS:
                     failed.status = "pending"
                     failed.error = (

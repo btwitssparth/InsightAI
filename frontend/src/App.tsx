@@ -36,7 +36,7 @@ function App() {
             <Route path="/datasets" element={<Datasets />} />
             <Route path="/datasets/:datasetId" element={<DatasetWorkspace />} />
             <Route path="/datasets/:datasetId/analyze" element={<AnalysisPage />} />
-        <Route path="/analyses/:analysisId" element={<AnalysisPage />} />
+            <Route path="/analyses/:analysisId" element={<AnalysisPage />} />
             <Route path="/history" element={<AnalysisHistory />} />
           </Route>
         </Route>

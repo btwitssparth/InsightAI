@@ -437,10 +437,9 @@ def execute_workflow(dataframe: pd.DataFrame, workflow: dict):
             raise ValueError("Every workflow step requires an id")
 
         if input_id is None:
-            if index > 0:
-                raise ValueError(
-                    f"Step '{step_id}' must reference an earlier step"
-                )
+            # input=null means this step intentionally starts from the
+            # original dataset. This is required for independent branches
+            # such as ranking + share calculations.
             step_dataframe = dataframe
         else:
             if input_id not in step_results:

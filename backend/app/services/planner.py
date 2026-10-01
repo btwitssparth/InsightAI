@@ -37,8 +37,14 @@ Rules:
 8. For top/bottom questions use top_n with rank=true and limit.
 9. For ranking followed by comparison, first group_by, then top_n, then difference/percentage_change using dynamic references.
 10. If the question asks for multiple independent facts, create the required branches and make sure the workflow contains a step for each requested fact.
-11. The final step may be any result, but all step results will be available to the insight generator.
-12. Return only JSON. No markdown or explanation.
+11. If the question asks for percentage share, contribution, proportion, or percentage of a total, you MUST create a share step. The share step MUST include column, metric_column, and aggregation.
+12. A share step should normally read the original dataset with input=null so the denominator is the full dataset total. Do not calculate share from a top_n result because that would change the denominator.
+13. If the requested share is for a ranked item such as the highest-revenue product, create the share calculation as an independent branch on the original dataset and also create the ranking branch needed to identify that item. All verified step results are available to the insight generator, which can match the ranked item to its share.
+14. For difference or percentage_change, the step MUST include column, metric_column, aggregation, and exactly two comparison_values. Use dynamic references when the compared categories were identified by an earlier ranking step.
+15. For group_by and top_n, ALWAYS include column, metric_column, and aggregation. top_n MUST also include limit.
+16. Before returning the workflow, check every distinct fact requested by the user and ensure at least one step produces the verified data needed to answer it. Do not omit a requested fact just because another branch answers part of the question.
+17. The final step may be any result, but all step results will be available to the insight generator.
+18. Return only JSON. No markdown or explanation.
 
 EXAMPLE:
 Question: "Which product generated the most revenue and how much higher was it than the second-highest?"

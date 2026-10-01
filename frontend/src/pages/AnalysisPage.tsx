@@ -151,6 +151,7 @@ export default function AnalysisPage() {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(!isNew)
   const [submitting, setSubmitting] = useState(false)
+  const [followUpSubmitting, setFollowUpSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -226,6 +227,28 @@ export default function AnalysisPage() {
     if (!analysis?.visualization) return null
     return analysis.visualization
   }, [analysis?.visualization])
+
+  async function handleFollowUp(questionText: string) {
+    if (!analysis || followUpSubmitting) return
+
+    setFollowUpSubmitting(true)
+    setError(null)
+
+    try {
+      const created = await askAnalysis({
+        dataset_id: analysis.dataset_id,
+        question: questionText,
+      })
+      navigate(`/analyses/${created.analysis_id}`)
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Could not start the follow-up analysis.',
+      )
+      setFollowUpSubmitting(false)
+    }
+  }
 
   if (!isNew && loading) {
     return (
@@ -336,6 +359,31 @@ export default function AnalysisPage() {
             <section className="rounded-xl border border-[#e5e5e3] bg-white p-5">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-[#777772]"><Sparkles size={14} /> Verified insight</div>
               <p className="mt-4 whitespace-pre-line text-sm leading-7 text-[#3f3f3b]">{analysis.insight}</p>
+            </section>
+          )}
+
+          {analysis.follow_up_questions.length > 0 && (
+            <section className="rounded-xl border border-[#e5e5e3] bg-white p-5">
+              <div className="flex items-center gap-2">
+                <Sparkles size={15} className="text-[#555550]" />
+                <h2 className="text-sm font-semibold text-[#292927]">Explore this analysis</h2>
+              </div>
+              <p className="mt-1 text-xs text-[#90908b]">
+                Continue with a focused question about the same dataset.
+              </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {analysis.follow_up_questions.map((followUp) => (
+                  <button
+                    key={followUp}
+                    type="button"
+                    disabled={followUpSubmitting}
+                    onClick={() => void handleFollowUp(followUp)}
+                    className="rounded-lg border border-[#dededb] bg-[#fafaf8] px-3.5 py-3 text-left text-xs leading-5 text-[#555550] transition hover:border-[#bdbdb8] hover:bg-white hover:text-[#292927] disabled:cursor-wait disabled:opacity-50"
+                  >
+                    {followUp}
+                  </button>
+                ))}
+              </div>
             </section>
           )}
 

@@ -123,105 +123,171 @@ Return ONLY the JSON object.
     # model directly. Pydantic's Field(gt=0) becomes "exclusiveMinimum"
     # in its generated schema, which the Gemini API schema transformer
     # does not accept.
+    # Keep operation-specific required fields non-null in Gemini's schema.
+    # The API supports anyOf/oneOf in structured JSON output, so use an
+    # operation-discriminated schema rather than making every field nullable.
+    # This prevents a valid-looking but unusable group_by/top_n/share plan
+    # such as {"operation": "group_by", "column": null}.
+    common_properties = {
+        "id": {"type": "string"},
+        "input": {"type": ["string", "null"]},
+        "operation": {"type": "string"},
+        "column": {"type": ["string", "null"]},
+        "metric_column": {"type": ["string", "null"]},
+        "aggregation": {
+            "type": ["string", "null"],
+            "enum": ["sum", "mean", "min", "max", "count", None],
+        },
+        "operator": {
+            "type": ["string", "null"],
+            "enum": ["eq", "gt", "gte", "lt", "lte", "between", None],
+        },
+        "value": {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "integer"},
+                {"type": "number"},
+                {
+                    "type": "array",
+                    "items": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "integer"},
+                            {"type": "number"},
+                        ]
+                    },
+                },
+                {"type": "null"},
+            ]
+        },
+        "comparison_values": {
+            "anyOf": [
+                {
+                    "type": "array",
+                    "items": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "integer"},
+                            {"type": "number"},
+                        ]
+                    },
+                },
+                {"type": "null"},
+            ]
+        },
+        "descending": {"type": "boolean"},
+        "rank": {"type": "boolean"},
+        "limit": {"type": ["integer", "null"]},
+        "columns": {
+            "anyOf": [
+                {"type": "array", "items": {"type": "string"}},
+                {"type": "null"},
+            ]
+        },
+        "period": {
+            "type": ["string", "null"],
+            "enum": ["day", "week", "month", "quarter", "year", None],
+        },
+    }
+
+    common_required = [
+        "id",
+        "input",
+        "operation",
+        "column",
+        "metric_column",
+        "aggregation",
+        "operator",
+        "value",
+        "comparison_values",
+        "descending",
+        "rank",
+        "limit",
+        "columns",
+        "period",
+    ]
+
+    def operation_schema(
+        operation: str,
+        required_non_null: list[str],
+    ) -> dict:
+        properties = {
+            key: value.copy() if isinstance(value, dict) else value
+            for key, value in common_properties.items()
+        }
+        properties["operation"] = {"type": "string", "enum": [operation]}
+
+        # Replace nullable definitions for fields that are mandatory for the
+        # selected operation. Other fields remain explicitly nullable because
+        # they are irrelevant to that operation.
+        for field in required_non_null:
+            if field == "column" or field == "metric_column":
+                properties[field] = {"type": "string"}
+            elif field == "aggregation":
+                properties[field] = {
+                    "type": "string",
+                    "enum": ["sum", "mean", "min", "max", "count"],
+                }
+            elif field == "operator":
+                properties[field] = {
+                    "type": "string",
+                    "enum": ["eq", "gt", "gte", "lt", "lte", "between"],
+                }
+            elif field == "limit":
+                properties[field] = {"type": "integer", "minimum": 1, "maximum": 1000}
+            elif field == "period":
+                properties[field] = {
+                    "type": "string",
+                    "enum": ["day", "week", "month", "quarter", "year"],
+                }
+            elif field == "columns":
+                properties[field] = {
+                    "type": "array",
+                    "items": {"type": "string"},
+                }
+            elif field == "comparison_values":
+                properties[field] = {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "integer"},
+                            {"type": "number"},
+                        ]
+                    },
+                }
+
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": common_required,
+        }
+
+    step_variants = [
+        operation_schema("describe", []),
+        operation_schema("group_by", ["column", "metric_column", "aggregation"]),
+        operation_schema("top_n", ["column", "metric_column", "aggregation", "limit"]),
+        operation_schema("filter", ["column", "operator"]),
+        operation_schema("sort", ["column"]),
+        operation_schema("correlation", ["columns"]),
+        operation_schema("compare", ["column", "metric_column", "aggregation", "comparison_values"]),
+        operation_schema("share", ["column", "metric_column", "aggregation"]),
+        operation_schema("difference", ["column", "metric_column", "aggregation", "comparison_values"]),
+        operation_schema("percentage_change", ["column", "metric_column", "aggregation", "comparison_values"]),
+        operation_schema("time_group", ["column", "metric_column", "aggregation", "period"]),
+    ]
+
     gemini_workflow_schema = {
         "type": "object",
         "properties": {
             "steps": {
                 "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "input": {"type": "string", "nullable": True},
-                        "operation": {
-                            "type": "string",
-                            "enum": [
-                                "describe",
-                                "group_by",
-                                "top_n",
-                                "filter",
-                                "sort",
-                                "correlation",
-                                "compare",
-                                "share",
-                                "difference",
-                                "percentage_change",
-                                "time_group",
-                            ],
-                        },
-                        "column": {"type": "string", "nullable": True},
-                        "metric_column": {"type": "string", "nullable": True},
-                        "aggregation": {
-                            "type": "string",
-                            "enum": ["sum", "mean", "min", "max", "count"],
-                            "nullable": True,
-                        },
-                        "operator": {
-                            "type": "string",
-                            "enum": ["eq", "gt", "gte", "lt", "lte", "between"],
-                            "nullable": True,
-                        },
-                        "value": {
-                            "anyOf": [
-                                {"type": "string"},
-                                {"type": "integer"},
-                                {"type": "number"},
-                                {
-                                    "type": "array",
-                                    "items": {
-                                        "anyOf": [
-                                            {"type": "string"},
-                                            {"type": "integer"},
-                                            {"type": "number"},
-                                        ]
-                                    },
-                                },
-                            ],
-                            "nullable": True,
-                        },
-                        "comparison_values": {
-                            "type": "array",
-                            "items": {
-                                "anyOf": [
-                                    {"type": "string"},
-                                    {"type": "integer"},
-                                    {"type": "number"},
-                                ]
-                            },
-                            "nullable": True,
-                        },
-                        "descending": {"type": "boolean"},
-                        "rank": {"type": "boolean"},
-                        "limit": {"type": "integer", "nullable": True},
-                        "columns": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "nullable": True,
-                        },
-                        "period": {
-                            "type": "string",
-                            "enum": ["day", "week", "month", "quarter", "year"],
-                            "nullable": True,
-                        },
-                    },
-                    "required": [
-                        "id",
-                        "input",
-                        "operation",
-                        "column",
-                        "metric_column",
-                        "aggregation",
-                        "operator",
-                        "value",
-                        "comparison_values",
-                        "descending",
-                        "rank",
-                        "limit",
-                        "columns",
-                        "period",
-                    ],
-                },
-            },
+                "minItems": 1,
+                "maxItems": 10,
+                "items": {"anyOf": step_variants},
+            }
         },
         "required": ["steps"],
     }

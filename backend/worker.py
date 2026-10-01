@@ -194,6 +194,14 @@ def _process_job(analysis_id):
                 or "quota" in error_text.lower()
             )
 
+            # Gemini 400 INVALID_ARGUMENT errors are request/schema errors.
+            # Retrying the same request cannot fix them and would waste
+            # another worker attempt (and potentially another provider call).
+            is_invalid_request_error = (
+                "400 INVALID_ARGUMENT" in error_text
+                or "INVALID_ARGUMENT" in error_text
+            )
+
             # Validation and execution ValueErrors are deterministic.
             # Retrying them would consume another Gemini request without
             # changing the underlying input or generated plan.
@@ -210,6 +218,12 @@ def _process_job(analysis_id):
                     failed.error = (
                         "AI analysis quota is currently exhausted. "
                         "Please try again after the provider quota resets."
+                    )
+                elif is_invalid_request_error:
+                    failed.status = "failed"
+                    failed.error = (
+                        "The AI analysis request was rejected by the provider. "
+                        "Please try again after the analysis planner is updated."
                     )
                 elif is_deterministic_error:
                     failed.status = "failed"

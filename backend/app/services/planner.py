@@ -155,10 +155,33 @@ Return ONLY the JSON object.
                             "enum": ["eq", "gt", "gte", "lt", "lte", "between"],
                             "nullable": True,
                         },
-                        "value": {"type": "string", "nullable": True},
+                        "value": {
+                            "anyOf": [
+                                {"type": "string"},
+                                {"type": "integer"},
+                                {"type": "number"},
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "anyOf": [
+                                            {"type": "string"},
+                                            {"type": "integer"},
+                                            {"type": "number"},
+                                        ]
+                                    },
+                                },
+                            ],
+                            "nullable": True,
+                        },
                         "comparison_values": {
                             "type": "array",
-                            "items": {"type": "string"},
+                            "items": {
+                                "anyOf": [
+                                    {"type": "string"},
+                                    {"type": "integer"},
+                                    {"type": "number"},
+                                ]
+                            },
                             "nullable": True,
                         },
                         "descending": {"type": "boolean"},

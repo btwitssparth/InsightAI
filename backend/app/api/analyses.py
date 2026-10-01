@@ -11,6 +11,7 @@ from app.models.analysis_schema import AnalysisExecuteRequest, AnalysisQuestionR
 from app.models.dataset import Dataset
 from app.services.analysis_engine import execute_plan, execute_workflow
 from app.services.insight_generator import generate_insight
+from app.services.followups import generate_follow_up_questions
 from app.services.json_utils import sanitize_for_json
 from app.services.planner import generate_analysis_plan
 from app.services.profiler import profile_dataset
@@ -66,6 +67,11 @@ def _serialize_analysis(analysis: Analysis) -> dict:
         "result": analysis.result,
         "insight": analysis.insight,
         "visualization": analysis.visualization,
+        "follow_up_questions": generate_follow_up_questions(
+            question=analysis.question,
+            plan=analysis.plan,
+            result=analysis.result,
+        ) if analysis.status == "completed" else [],
         "error": analysis.error,
         "attempt_count": analysis.attempt_count,
         "created_at": analysis.created_at,

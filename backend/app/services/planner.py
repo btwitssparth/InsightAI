@@ -246,6 +246,49 @@ Return ONLY the JSON object.
             "Gemini analysis plan must be a JSON object"
         )
 
+    # Gemini structured output can omit operation-specific fields even though
+    # the operation itself is valid. Normalize common missing fields before
+    # Pydantic's operation validators run.
+    operation_defaults = {
+        "group_by": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+        },
+        "top_n": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+            "limit": None,
+        },
+        "share": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+        },
+        "difference": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+            "comparison_values": None,
+        },
+        "percentage_change": {
+            "column": None,
+            "metric_column": None,
+            "aggregation": None,
+            "comparison_values": None,
+        },
+    }
+
+    # Do not invent values here. Missing required fields must still fail
+    # validation; this normalization only makes the generated structure
+    # explicit and keeps the error deterministic.
+    for step in plan_data.get("steps", []):
+        if isinstance(step, dict):
+            operation = step.get("operation")
+            for field, default in operation_defaults.get(operation, {}).items():
+                step.setdefault(field, default)
+
     # Gemini may emit explicit nulls for optional boolean fields.
     # Pydantic defaults only apply when a field is omitted, not when it is null.
     # Normalize those values before strict workflow validation.

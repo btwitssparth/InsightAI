@@ -42,7 +42,8 @@ Rules:
 13. If the requested share is for a ranked item such as the highest-revenue product, create the share calculation as an independent branch on the original dataset and also create the ranking branch needed to identify that item. All verified step results are available to the insight generator, which can match the ranked item to its share.
 14. For difference or percentage_change, the step MUST include column, metric_column, aggregation, and exactly two comparison_values. Use dynamic references when the compared categories were identified by an earlier ranking step.
 15. For group_by and top_n, ALWAYS include column, metric_column, and aggregation. top_n MUST also include limit.
-16. Before returning the workflow, check every distinct fact requested by the user and ensure at least one step produces the verified data needed to answer it. Do not omit a requested fact just because another branch answers part of the question.
+16. Do not create separate group_by steps for each named category/value. If the question names specific categories, use the actual category column and filter those values when needed; one group_by can aggregate multiple categories.
+17. Before returning the workflow, check every distinct fact requested by the user and ensure at least one step produces the verified data needed to answer it. Do not omit a requested fact just because another branch answers part of the question.
 17. The final step may be any result, but all step results will be available to the insight generator.
 18. Return only JSON. No markdown or explanation.
 
@@ -269,7 +270,7 @@ Return ONLY the JSON object.
         operation_schema("describe", []),
         operation_schema("group_by", ["column", "metric_column", "aggregation"]),
         operation_schema("top_n", ["column", "metric_column", "aggregation", "limit"]),
-        operation_schema("filter", ["column", "operator"]),
+        operation_schema("filter", ["column", "operator", "value"]),
         operation_schema("sort", ["column"]),
         operation_schema("correlation", ["columns"]),
         operation_schema("compare", ["column", "metric_column", "aggregation", "comparison_values"]),

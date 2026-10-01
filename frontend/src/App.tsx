@@ -11,17 +11,6 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import './App.css'
 
-function Placeholder({ title }: { title: string }) {
-  return (
-    <section className="mx-auto max-w-6xl px-5 py-8 md:px-8 md:py-10">
-      <div className="page-enter">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9a9a95]">InsightAI</p>
-        <h1 className="text-2xl font-semibold tracking-[-0.025em] text-[#171717]">{title}</h1>
-      </div>
-    </section>
-  )
-}
-
 function App() {
   return (
     <BrowserRouter>

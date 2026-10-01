@@ -9,6 +9,7 @@ export interface Analysis {
   result: Record<string, unknown> | null
   insight: string | null
   visualization: Record<string, unknown> | null
+  follow_up_questions: string[]
   error: string | null
   attempt_count: number
   created_at: string

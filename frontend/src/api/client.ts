@@ -18,19 +18,33 @@ export class ApiError extends Error {
   }
 }
 
+let refreshPromise: Promise<string> | null = null
+
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const { data, error } = await supabase.auth.refreshSession()
+
+      if (error || !data.session?.access_token) {
+        throw new ApiError(
+          'Your session has expired. Please sign in again.',
+          'AUTHENTICATION_REQUIRED',
+          401,
+        )
+      }
+
+      return data.session.access_token
+    })().finally(() => {
+      refreshPromise = null
+    })
+  }
+
+  return refreshPromise
+}
+
 async function getAccessToken(forceRefresh = false): Promise<string> {
   if (forceRefresh) {
-    const { data, error } = await supabase.auth.refreshSession()
-
-    if (error || !data.session?.access_token) {
-      throw new ApiError(
-        'Your session has expired. Please sign in again.',
-        'AUTHENTICATION_REQUIRED',
-        401,
-      )
-    }
-
-    return data.session.access_token
+    return refreshAccessToken()
   }
 
   const {
@@ -44,6 +58,12 @@ async function getAccessToken(forceRefresh = false): Promise<string> {
       'AUTHENTICATION_REQUIRED',
       401,
     )
+  }
+
+  // Avoid sending a token that is already expired or about to expire.
+  const expiresAt = session.expires_at
+  if (expiresAt && expiresAt <= Math.floor(Date.now() / 1000) + 30) {
+    return refreshAccessToken()
   }
 
   return session.access_token
@@ -60,7 +80,7 @@ function isAuthenticationError(error: unknown) {
   )
 }
 
-async function requestWithToken<T>(
+async function requestWithToken(
   path: string,
   options: RequestInit,
   accessToken: string,

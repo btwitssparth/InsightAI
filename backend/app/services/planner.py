@@ -131,18 +131,12 @@ Return ONLY the JSON object.
     # such as {"operation": "group_by", "column": null}.
     common_properties = {
         "id": {"type": "string"},
-        "input": {"type": ["string", "null"]},
+        "input": {"anyOf": [{"type": "string"}, {"type": "null"}]},
         "operation": {"type": "string"},
-        "column": {"type": ["string", "null"]},
-        "metric_column": {"type": ["string", "null"]},
-        "aggregation": {
-            "type": ["string", "null"],
-            "enum": ["sum", "mean", "min", "max", "count", None],
-        },
-        "operator": {
-            "type": ["string", "null"],
-            "enum": ["eq", "gt", "gte", "lt", "lte", "between", None],
-        },
+        "column": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "metric_column": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "aggregation": {"anyOf": [{"type": "string", "enum": ["sum", "mean", "min", "max", "count"]}, {"type": "null"}]},
+        "operator": {"anyOf": [{"type": "string", "enum": ["eq", "gt", "gte", "lt", "lte", "between"]}, {"type": "null"}]},
         "value": {
             "anyOf": [
                 {"type": "string"},
@@ -178,17 +172,14 @@ Return ONLY the JSON object.
         },
         "descending": {"type": "boolean"},
         "rank": {"type": "boolean"},
-        "limit": {"type": ["integer", "null"]},
+        "limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
         "columns": {
             "anyOf": [
                 {"type": "array", "items": {"type": "string"}},
                 {"type": "null"},
             ]
         },
-        "period": {
-            "type": ["string", "null"],
-            "enum": ["day", "week", "month", "quarter", "year", None],
-        },
+        "period": {"anyOf": [{"type": "string", "enum": ["day", "week", "month", "quarter", "year"]}, {"type": "null"}]},
     }
 
     common_required = [

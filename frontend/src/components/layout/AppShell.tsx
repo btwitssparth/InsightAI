@@ -1,12 +1,14 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
   Database,
   History,
+  LogOut,
 } from 'lucide-react'
 import { useState } from 'react'
+import { supabase } from '../../lib/supabase'
 
 const navigation = [
   { label: 'Dashboard', to: '/dashboard', icon: BarChart3 },
@@ -16,17 +18,30 @@ const navigation = [
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    if (loggingOut) return
+    setLoggingOut(true)
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      setLoggingOut(false)
+      return
+    }
+    navigate('/login', { replace: true })
+  }
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] text-[#171717]">
+    <div className="min-h-screen bg-[#f4f4f1] text-[#171717]">
       <div className="flex min-h-screen">
         <aside
           className={[
-            'sticky top-0 hidden h-screen shrink-0 flex-col border-r border-[#e5e5e3] bg-white transition-[width] duration-200 ease-out md:flex',
+            'sticky top-0 hidden h-screen shrink-0 flex-col border-r border-[#dfdfdb] bg-[#fbfbf9] transition-[width] duration-200 ease-out md:flex',
             collapsed ? 'w-[76px]' : 'w-[248px]',
           ].join(' ')}
         >
-          <div className="flex h-16 items-center border-b border-[#e5e5e3] px-4">
+          <div className="flex h-16 items-center border-b border-[#dfdfdb] px-4">
             <NavLink
               to="/dashboard"
               className={[
@@ -34,7 +49,7 @@ export function AppShell() {
                 collapsed ? 'w-full justify-center' : 'px-2',
               ].join(' ')}
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#171717] text-white">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#171717] text-white shadow-[0_2px_5px_rgba(0,0,0,0.12)]">
                 <BarChart3 size={17} strokeWidth={2.2} />
               </div>
 
@@ -79,7 +94,18 @@ export function AppShell() {
             ))}
           </nav>
 
-          <div className="border-t border-[#e5e5e3] p-3">
+          <div className="border-t border-[#dfdfdb] p-3">
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="mb-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg text-[#777772] transition-colors duration-150 hover:bg-[#f1f1ee] hover:text-[#7b5148] disabled:cursor-wait disabled:opacity-50"
+              title="Log out"
+            >
+              <LogOut size={16} />
+              {!collapsed && <span className="text-xs font-medium">{loggingOut ? 'Logging out…' : 'Log out'}</span>}
+            </button>
+
             <button
               type="button"
               onClick={() => setCollapsed((value) => !value)}
@@ -99,7 +125,7 @@ export function AppShell() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-20 flex h-16 items-center border-b border-[#e5e5e3] bg-white/95 px-5 backdrop-blur-sm md:px-8">
+          <header className="sticky top-0 z-20 flex h-16 items-center border-b border-[#dfdfdb] bg-[#fbfbf9] px-5 md:px-8">
             <div className="flex items-center gap-3 md:hidden">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#171717] text-white">
                 <BarChart3 size={16} strokeWidth={2.2} />
@@ -108,10 +134,19 @@ export function AppShell() {
             </div>
 
             <div className="hidden md:block">
-              <div className="text-sm font-medium text-[#292927]">
-                Data workspace
-              </div>
+              <div className="text-sm font-semibold tracking-[-0.01em] text-[#292927]">Data workspace</div>
+              <div className="text-[10px] text-[#999994]">Analyze, verify, understand</div>
             </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="ml-auto flex h-9 items-center gap-2 rounded-lg border border-[#dededb] bg-white px-3 text-xs font-medium text-[#666660] transition-colors hover:bg-[#f1f1ee] hover:text-[#7b5148] disabled:cursor-wait disabled:opacity-50 md:hidden"
+            >
+              <LogOut size={14} />
+              {loggingOut ? 'Logging out…' : 'Log out'}
+            </button>
           </header>
 
           <main className="min-h-[calc(100vh-4rem)]">
